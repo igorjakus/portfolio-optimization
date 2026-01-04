@@ -1,4 +1,15 @@
 import numpy as np
+import yfinance as yf
+
+
+def load_prices(tickers, start="2020-01-01"):
+    """Fetches WIG20 data. Uses Adjusted Close for returns as it accounts for dividends and splits."""
+    data = yf.download(tickers, start=start, progress=False, auto_adjust=True)
+    if data is None or data.empty:
+        raise ValueError("No data fetched. Please check the tickers and date range.")
+
+    prices = data["Close"].ffill().bfill()
+    return prices
 
 
 def semivariance(returns: np.ndarray):
@@ -200,33 +211,6 @@ def swap_mutation(population: np.ndarray, mutation_rate: float = 0.1) -> np.ndar
     return population
 
 
-def arithmetic_crossover(
-    parent1: np.ndarray,
-    parent2: np.ndarray,
-    alpha: float = 0.5,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Performs arithmetic crossover between two parent portfolios.
-
-    Args:
-        parent1 (np.ndarray): Weights of the first parent portfolio
-        parent2 (np.ndarray): Weights of the second parent portfolio
-        alpha (float): Crossover parameter (0 <= alpha <= 1). Defaults to 0.5.
-
-    Returns:
-        (np.ndarray, np.ndarray): Weights of the two offspring portfolios
-
-    Note:
-        Maintains key constraints when parents satisfy them:
-        - Sum-to-one: if both parents sum to 1, offspring will also (since α·1 + (1-α)·1 = 1)
-        - Min/max bounds: if all parent weights are in [min_w, max_w], offspring weights will be too
-        - Does NOT preserve cardinality: offspring may have more non-zero weights than max_cardinality
-          even if both parents respect the limit (due to convex combinations creating new non-zero entries)
-    """
-    offspring1 = alpha * parent1 + (1 - alpha) * parent2
-    offspring2 = (1 - alpha) * parent1 + alpha * parent2
-    return offspring1, offspring2
-
-
 def transfer_mutation(population: np.ndarray, mutation_rate: float = 0.2, flow_amount: float = 0.05) -> np.ndarray:
     """Applies transfer mutation to portfolio weights.
     Transfers a small amount of weight from one asset to another.
@@ -273,3 +257,33 @@ def transfer_mutation(population: np.ndarray, mutation_rate: float = 0.2, flow_a
     population[mutation_indices, asset_to] += actual_flow
 
     return population
+
+
+def arithmetic_crossover(
+    parent1: np.ndarray,
+    parent2: np.ndarray,
+    alpha: float = 0.5,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Performs arithmetic crossover between two parent portfolios.
+
+    Args:
+        parent1 (np.ndarray): Weights of the first parent portfolio
+        parent2 (np.ndarray): Weights of the second parent portfolio
+        alpha (float): Crossover parameter (0 <= alpha <= 1). Defaults to 0.5.
+
+    Returns:
+        (np.ndarray, np.ndarray): Weights of the two offspring portfolios
+
+    Note:
+        Maintains key constraints when parents satisfy them:
+        - Sum-to-one: if both parents sum to 1, offspring will also (since α·1 + (1-α)·1 = 1)
+        - Min/max bounds: if all parent weights are in [min_w, max_w], offspring weights will be too
+        - Does NOT preserve cardinality: offspring may have more non-zero weights than max_cardinality
+          even if both parents respect the limit (due to convex combinations creating new non-zero entries)
+    """
+    offspring1 = alpha * parent1 + (1 - alpha) * parent2
+    offspring2 = (1 - alpha) * parent1 + alpha * parent2
+    return offspring1, offspring2
+
+
+# TODO: blend crossover?
