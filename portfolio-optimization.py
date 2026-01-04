@@ -225,3 +225,51 @@ def arithmetic_crossover(
     offspring1 = alpha * parent1 + (1 - alpha) * parent2
     offspring2 = (1 - alpha) * parent1 + alpha * parent2
     return offspring1, offspring2
+
+
+def transfer_mutation(population: np.ndarray, mutation_rate: float = 0.2, flow_amount: float = 0.05) -> np.ndarray:
+    """Applies transfer mutation to portfolio weights.
+    Transfers a small amount of weight from one asset to another.
+
+    Args:
+        population (np.ndarray): Population of portfolios (shape: pop_size x n_assets)
+        mutation_rate (float): Probability of mutation for each individual. Defaults to 0.2.
+        flow_amount (float): Amount of weight to transfer between assets. Defaults to 0.05.
+        TODO: make flow_amount relative to current weight?
+        TODO: make flow_amount learnable parameter?
+
+    Returns:
+        np.ndarray: Mutated population (new copy)
+
+    Note:
+        Preserves sum-to-one constraint.
+        Doesn't preserve min-weight, max-weight and max-cardinality contraints.
+    """
+    population = population.copy()
+    pop_size, n_assets = population.shape
+
+    # Determine which individuals will be mutated
+    mutation_mask = np.random.rand(pop_size) < mutation_rate
+    mutation_indices = np.where(mutation_mask)[0]
+    n_mutations = len(mutation_indices)
+
+    if n_mutations == 0:
+        return population
+
+    # Select two different assets for each mutated individual
+    asset_from = np.random.randint(0, n_assets, size=n_mutations)
+    asset_to = np.random.randint(0, n_assets, size=n_mutations)
+
+    # Ensure asset_from != asset_to
+    while np.any(asset_from == asset_to):
+        bad_mask = asset_from == asset_to
+        asset_to[bad_mask] = np.random.randint(0, n_assets, size=np.sum(bad_mask))
+
+    # Ensure we don't transfer more than available
+    actual_flow = np.minimum(flow_amount, population[mutation_indices, asset_from])
+
+    # Transfer weight
+    population[mutation_indices, asset_from] -= actual_flow
+    population[mutation_indices, asset_to] += actual_flow
+
+    return population
