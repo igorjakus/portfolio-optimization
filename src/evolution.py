@@ -1,17 +1,27 @@
 import numpy as np
 from deap import base, creator, tools, algorithms
+from tqdm import tqdm
 from src.utils import normalize_weights
 from src.mutations import gaussian_mutation, swap_mutation
 from src.crossovers import arithmetic_crossover
 
 
+class FitnessMulti(base.Fitness):
+    """Custom fitness class with hashability support for DEAP."""
+    weights = (1.0, -1.0)
+    
+    def __hash__(self):
+        return hash(id(self))
+    
+    def __eq__(self, other):
+        return id(self) == id(other)
+
+
 def setup_deap(stock_names, stock_returns_m, stock_covariances):
     """Initializes DEAP toolbox with multiobjective setup."""
     # Define fitness: maximize return, minimize risk
-    if not hasattr(creator, "FitnessMulti"):
-        creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
     if not hasattr(creator, "Individual"):
-        creator.create("Individual", np.ndarray, fitness=creator.FitnessMulti)
+        creator.create("Individual", np.ndarray, fitness=FitnessMulti)
 
     toolbox = base.Toolbox()
 
@@ -67,14 +77,19 @@ def setup_deap(stock_names, stock_returns_m, stock_covariances):
     return toolbox
 
 
-def run_nsga2(toolbox, pop_size=200, n_generations=150, cxpb=0.7, mutpb=0.6):
-    """Runs NSGA-II algorithm."""
+def run_nsga2(toolbox, pop_size=200, n_generations=150, cxpb=0.7, mutpb=0.6, callback=None, callback_interval=10):
+    """Runs NSGA-II with optional callback every ``callback_interval`` generations."""
+
     pop = toolbox.population(n=pop_size)
 
     # Initial evaluation
-    fitnesses = list(map(toolbox.evaluate, pop))
-    for ind, fit in zip(pop, fitnesses):
+    invalid_ind = [ind for ind in pop if not ind.fitness.valid]
+    fitnesses = map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
         ind.fitness.values = fit
+
+    # Ensure crowding values are set before the evolutionary loop
+    pop = tools.selNSGA2(pop, len(pop))
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg_return", lambda x: np.mean([f[0] for f in x]))
@@ -83,8 +98,26 @@ def run_nsga2(toolbox, pop_size=200, n_generations=150, cxpb=0.7, mutpb=0.6):
     logbook = tools.Logbook()
     logbook.header = ["gen", "nevals", "avg_return", "avg_risk"]
 
-    pop, logbook = algorithms.eaSimple(
-        pop, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=n_generations, stats=stats, verbose=True
-    )
+    record = stats.compile(pop)
+    logbook.record(gen=0, nevals=len(invalid_ind), **record)
+
+    for gen in tqdm(range(1, n_generations + 1), desc="Generations", total=n_generations):
+        offspring = algorithms.varAnd(pop, toolbox, cxpb=cxpb, mutpb=mutpb)
+
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+
+        pop = tools.selNSGA2(pop + offspring, pop_size)
+
+        record = stats.compile(pop)
+        logbook.record(gen=gen, nevals=len(invalid_ind), **record)
+
+        if callback is not None and gen % callback_interval == 0:
+            try:
+                callback(gen, pop, logbook)
+            except Exception as exc:
+                print(f"Callback failed at gen {gen}: {exc}")
 
     return pop, logbook

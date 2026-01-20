@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import pandas as pd
 from IPython.display import clear_output
+import os
 
 import deap.tools as tools
 
@@ -232,7 +234,45 @@ def plot_portfolio_composition(weights, names, title="Skład portfela"):
     plt.show()
 
 
-def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p_s):
+def plot_final_portfolio(weights, names, title="Final Optimized Portfolio", output_dir=None, show=True):
+    """Plots the composition of the final optimized portfolio."""
+    mask = np.abs(weights) > 0.01
+    filtered_weights = weights[mask]
+    filtered_names = names[mask]
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    colors = sns.color_palette("husl", len(filtered_weights))
+    bars = ax.bar(filtered_names, filtered_weights * 100, color=colors, edgecolor="black", linewidth=1.5)
+
+    for bar in bars:
+        yval = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            yval + 0.3,
+            f"{yval:.2f}%",
+            ha="center",
+            va="bottom",
+            fontsize=11,
+            fontweight="bold",
+        )
+
+    ax.set_title(title, fontweight="bold", fontsize=16)
+    ax.set_xlabel("Stock (Ticker)", fontweight="bold", fontsize=12)
+    ax.set_ylabel("Weight (%)", fontweight="bold", fontsize=12)
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.grid(axis="y", alpha=0.3)
+    plt.xticks(rotation=45, ha="right", fontsize=11)
+    plt.tight_layout()
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, "final_portfolio_composition.png"), dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p_s, output_dir=None, show=True):
     """Visualizes the Pareto front found by NSGA-II against Markowitz efficient frontier."""
 
     pareto_front = tools.sortNondominated(final_pop, len(final_pop), first_front_only=True)[0]
@@ -300,7 +340,13 @@ def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p
     axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, "pareto_vs_markowitz.png"), dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
     return pareto_front, pareto_returns_sorted, pareto_risks_sorted
 
@@ -368,3 +414,69 @@ def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, 
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_portfolio_vs_baseline(prices_df, portfolio_weights, index_prices=None, title="Portfolio vs Index", output_dir=None, show=True):
+    """Plots cumulative performance of a chosen portfolio versus an index benchmark.
+
+    Args:
+        prices_df (pd.DataFrame): Price history for the assets used in the portfolio (columns are tickers).
+        portfolio_weights (array-like): Weights for the selected portfolio, aligned with ``prices_df`` columns.
+        index_prices (pd.Series, optional): Optional benchmark index price history to compare against.
+        title (str, optional): Plot title. Defaults to "Portfolio vs Index".
+        output_dir (str, optional): Directory to save the plot. If provided, plot is saved as PNG.
+        show (bool, optional): Whether to display the plot. Defaults to True.
+
+    Returns:
+        pd.DataFrame: Cumulative growth series for portfolio and benchmark (if provided).
+    """
+
+    prices_df = pd.DataFrame(prices_df).copy()
+    weights = np.asarray(portfolio_weights, dtype=float)
+    if prices_df.shape[1] != weights.size:
+        raise ValueError("prices_df columns must align with portfolio_weights length")
+
+    weights = weights / np.sum(weights)
+
+    returns = prices_df.pct_change().dropna()
+    portfolio_curve = (1 + returns.values.dot(weights)).cumprod()
+
+    curves = pd.DataFrame(
+        {
+            "Portfolio": portfolio_curve,
+        },
+        index=returns.index,
+    )
+
+    if index_prices is not None:
+        # Align benchmark to the same date range and compute cumulative growth
+        index_series = pd.Series(index_prices)
+        # Reindex to portfolio dates, forward-fill missing
+        index_aligned = index_series.reindex(prices_df.index).ffill().bfill()
+        # Compute returns starting from the first valid return date
+        index_returns = index_aligned.pct_change().reindex(returns.index).fillna(0)
+        # Normalize to start at 1 (same as portfolio)
+        index_cumulative = (1 + index_returns).cumprod()
+        curves["Index"] = index_cumulative.values
+
+    plt.figure(figsize=(12, 6))
+    for col in curves.columns:
+        plt.plot(curves.index, curves[col], linewidth=2, label=col)
+
+    plt.axhline(1.0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
+    plt.title(title, fontweight="bold")
+    plt.xlabel("Date")
+    plt.ylabel("Growth of $1")
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.legend()
+    plt.tight_layout()
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        filename = title.replace(" ", "_").replace("/", "_") + ".png"
+        plt.savefig(os.path.join(output_dir, filename), dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return curves
