@@ -16,31 +16,7 @@ from src.plots import (
     plot_final_portfolio,
 )
 from src.utils import optimize_markowitz
-
-
-# WIG20 default tickers
-DEFAULT_TICKERS = [
-    "PKN.WA",  # Orlen
-    "PKO.WA",  # PKO BP
-    "PZU.WA",  # PZU
-    "PEO.WA",  # Bank Pekao
-    "KGH.WA",  # KGHM
-    "CDR.WA",  # CD Projekt
-    "DNP.WA",  # Dino Polska
-    "LPP.WA",  # LPP
-    "ALE.WA",  # Allegro
-    "CPS.WA",  # Cyfrowy Polsat
-    "OPL.WA",  # Orange Polska
-    "JSW.WA",  # JSW
-    "CCC.WA",  # CCC
-    "MBK.WA",  # mBank
-    "SPL.WA",  # Santander Bank Polska
-    "PGE.WA",  # PGE
-    "TPE.WA",  # Tauron
-    "KTY.WA",  # Kety
-    "ACP.WA",  # Asseco Poland
-    "LWB.WA",  # Bogdanka
-]
+from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
 def load_benchmark(ticker: str, start: str):
@@ -130,10 +106,11 @@ def make_callback(
 def parse_args():
     parser = argparse.ArgumentParser(description="Run NSGA-II portfolio optimization with periodic plots")
     parser.add_argument(
-        "--tickers",
+        "--ticker-set",
         type=str,
-        help="Comma-separated tickers (default: built-in large-cap set)",
-        default="",
+        choices=TICKER_SETS.keys(),
+        default=DEFAULT_TICKER_SET,
+        help=f"Predefined ticker set to use (default: {DEFAULT_TICKER_SET})",
     )
     parser.add_argument(
         "--start-date",
@@ -165,7 +142,9 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     print(f"Saving plots to: {output_dir}")
 
-    tickers = [t.strip() for t in args.tickers.split(",") if t.strip()] or DEFAULT_TICKERS
+    tickers = TICKER_SETS[args.ticker_set]
+    print(f"Using predefined ticker set '{args.ticker_set}': {tickers}")
+
     start_date = args.start_date
     benchmark_ticker = args.benchmark
 
@@ -175,6 +154,7 @@ def main():
         "timestamp": now.isoformat(),
         "parameters": {
             "tickers": tickers,
+            "ticker_set": args.ticker_set,
             "start_date": start_date,
             "benchmark": benchmark_ticker,
             "pop_size": args.pop_size,
