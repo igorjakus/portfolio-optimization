@@ -289,6 +289,106 @@ def plot_final_portfolio(weights, names, title="Final Optimized Portfolio", outp
         plt.close()
 
 
+def plot_performance_summary(
+    prices_df,
+    portfolio_weights,
+    stock_names,
+    index_prices=None,
+    title="Portfolio Summary",
+    output_dir=None,
+    show=True,
+    filename="performance_summary.png",
+):
+    """
+    Plots cumulative performance (Left) and portfolio composition (Right) side-by-side.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 7))
+
+    # ==========================
+    # LEFT PLOT: Cumulative Performance
+    # ==========================
+    prices_df = pd.DataFrame(prices_df).copy()
+    weights = np.asarray(portfolio_weights, dtype=float)
+    
+    # Normalize weights just in case
+    weights = weights / np.sum(weights)
+
+    returns = prices_df.pct_change().dropna()
+    portfolio_curve = (1 + returns.values.dot(weights)).cumprod()
+
+    curves = pd.DataFrame({"Portfolio": portfolio_curve}, index=returns.index)
+
+    if index_prices is not None:
+        # Align benchmark
+        index_series = pd.Series(index_prices)
+        index_aligned = index_series.reindex(prices_df.index).ffill().bfill()
+        index_returns = index_aligned.pct_change().reindex(returns.index).fillna(0)
+        index_cumulative = (1 + index_returns).cumprod()
+        curves["Index"] = index_cumulative.values
+
+    for col in curves.columns:
+        ax1.plot(curves.index, curves[col], linewidth=2, label=col)
+
+    ax1.axhline(1.0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
+    ax1.set_title("Cumulative Return vs Benchmark", fontweight="bold", fontsize=14)
+    ax1.set_xlabel("Date", fontsize=12)
+    ax1.set_ylabel("Growth of $1", fontsize=12)
+    ax1.grid(True, linestyle="--", alpha=0.4)
+    ax1.legend(fontsize=12)
+
+    # ==========================
+    # RIGHT PLOT: Composition
+    # ==========================
+    mask = np.abs(weights) > 0.01
+    filtered_weights = weights[mask]
+    filtered_names = stock_names[mask]
+
+    colors = sns.color_palette("husl", len(filtered_weights))
+    bars = ax2.bar(
+        filtered_names,
+        filtered_weights * 100,
+        color=colors,
+        edgecolor="black",
+        linewidth=1.5,
+    )
+
+    for bar in bars:
+        yval = bar.get_height()
+        ax2.text(
+            bar.get_x() + bar.get_width() / 2,
+            yval + 0.3,
+            f"{yval:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
+
+    ax2.set_title("Portfolio Composition (>1%)", fontweight="bold", fontsize=14)
+    ax2.set_xlabel("Asset", fontsize=12)
+    ax2.set_ylabel("Weight (%)", fontsize=12)
+    ax2.axhline(0, color="black", linewidth=0.8)
+    ax2.grid(axis="y", alpha=0.3)
+    
+    # Rotate x-labels on the right plot
+    plt.setp(ax2.get_xticklabels(), rotation=45, ha="right", fontsize=11)
+
+    # ==========================
+    # FINALIZE
+    # ==========================
+    plt.suptitle(title, fontsize=18, fontweight="bold", y=0.98)
+    plt.tight_layout()
+    
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, filename), dpi=150)
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
 def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p_s, output_dir=None, show=True):
     """Visualizes the Pareto front found by NSGA-II against Markowitz efficient frontier."""
 

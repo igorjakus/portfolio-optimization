@@ -15,6 +15,7 @@ from src.plots import (
     plot_pareto_vs_markowitz,
     plot_portfolio_vs_baseline,
     plot_final_portfolio,
+    plot_performance_summary,
 )
 from src.utils import optimize_markowitz
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
@@ -92,13 +93,16 @@ def make_callback(
         )
 
         best = max(pareto_front, key=lambda ind: ind.fitness.values[0])
-        plot_portfolio_vs_baseline(
+        
+        plot_performance_summary(
             prices_df[stock_names],
             np.array(best),
+            np.array(stock_names),
             index_prices=index_prices,
-            title=f"{gen} portfolio vs index",
+            title=f"Generation {gen}: Best Portfolio Summary",
             output_dir=output_dir,
             show=show_plots,
+            filename=f"summary_gen_{gen:03d}.png",
         )
 
     return _callback
@@ -262,18 +266,13 @@ def main():
         output_dir=output_dir,
         show=not args.no_plots,
     )
-    plot_portfolio_vs_baseline(
+
+    plot_performance_summary(
         prices,
         np.array(best),
-        index_prices=benchmark_prices,
-        title="Final Portfolio vs Index",
-        output_dir=output_dir,
-        show=not args.no_plots,
-    )
-    plot_final_portfolio(
-        np.array(best),
         np.array(stock_names),
-        title="Final Optimized Portfolio",
+        index_prices=benchmark_prices,
+        title="Final Portfolio Performance",
         output_dir=output_dir,
         show=not args.no_plots,
     )

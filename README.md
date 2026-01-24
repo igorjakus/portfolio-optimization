@@ -2,85 +2,74 @@
 
 A multi-objective portfolio optimization tool using the NSGA-II evolutionary algorithm. The system optimizes portfolio weights to maximize returns while minimizing risk, comparing results against the Markowitz efficient frontier and market indices.
 
+## Features
+
+- **Multi-Objective Optimization**: Find optimal trade-offs between return and risk using NSGA-II.
+- **Multiple Risk Metrics**: Optimize for Volatility (std), Max Drawdown (MDD), or Sharpe Ratio.
+- **Markowitz Comparison**: Automated baseline against analytical efficient frontiers.
+- **Automated Data Fetching**: Integrated `yfinance` support for global assets.
+- **Reproducibility**: Seed support for consistent experimental results.
+- **Rich Visualization**: Automated generation of Pareto fronts and performance charts.
+
 ## Installation
 
-Requires Python 3.14+. Install dependencies using [uv](https://github.com/astral-sh/uv):
-
 ```bash
-uv venv --python 3.14
 uv sync
 ```
 
 ## Usage
 
-### Basic Run
-
 ```bash
-uv run main.py
+uv run python main.py [OPTIONS]
 ```
 
-This runs optimization with default parameters on WIG20 stocks.
-
-### Command Line Options
-
-```bash
-uv run main.py [OPTIONS]
-```
+### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--tickers` | Comma-separated ticker symbols | WIG20 constituents |
-| `--start-date` | Historical data start date (YYYY-MM-DD) | `2002-01-01` |
-| `--benchmark` | Benchmark index ticker | Synthetic equal-weight index |
+| `--ticker-set` | Asset set (`WIG20`, `US_TECH`, `US_DEFENSIVE`, `ETFS`, `CRYPTO`) | `WIG20` |
+| `--risk-metric` | Objective: `std`, `mdd`, or `sharpe` | `std` |
+| `--seed` | Random seed for reproducibility | `None` |
 | `--pop-size` | Population size | `200` |
 | `--n-generations` | Number of generations | `80` |
-| `--cxpb` | Crossover probability | `0.7` |
-| `--mutpb` | Mutation probability | `0.6` |
-| `--callback-interval` | Plot every N generations | `10` |
-| `--no-plots` | Suppress plot display (still saves to disk) | `False` |
+| `--start-date` | Data start date (YYYY-MM-DD) | `2002-01-01` |
+| `--benchmark` | Benchmark ticker (optional) | Synthetic |
+| `--no-plots` | Suppress plot display | `False` |
 
 ### Examples
 
-**Quick test run:**
+**Reproducible US Tech run:**
 ```bash
-uv run main.py --pop-size 50 --n-generations 20
+uv run python main.py --ticker-set US_TECH --seed 42 --n-generations 100
 ```
 
-**Full optimization run:**
+**Crypto Max Drawdown optimization:**
 ```bash
-uv run main.py --pop-size 1500 --n-generations 1000 --callback-interval 100 --no-plots
-```
-
-**Custom tickers (S&P 500 diversified portfolio ~20 stocks):**
-```bash
-uv run main.py --tickers "JPM,BAC,WFC,XOM,CVX,MRK,JNJ,PFE,PG,KO,MCD,WMT,HD,BA,GE,MMM,CAT,IBM,LMT,HON" --benchmark "VOO"
+uv run python main.py --ticker-set CRYPTO --risk-metric mdd --pop-size 300
 ```
 
 ## Output
 
-Results are saved to `plots/experiment-YYYYMMDD-HHMMSS/`:
-
-- `config.yaml` - Experiment parameters
-- `Pareto_Front_vs_Markowitz.png` - Pareto front comparison with efficient frontier
-- `Final_Portfolio_vs_Index.png` - Cumulative returns comparison
-- `Final_Optimized_Portfolio.png` - Final portfolio weight distribution
-- Intermediate plots at each callback interval
+Results saved to `plots/experiment-{TIMESTAMP}/`:
+- `config.yaml`: Run parameters and seed.
+- `pareto_vs_markowitz.png`: Pareto front vs Efficient Frontier.
+- `Final_Portfolio_vs_Index.png`: Cumulative growth comparison.
+- `final_portfolio_composition.png`: Final asset weights.
 
 ## Project Structure
 
 ```
 ├── main.py                 # CLI entry point
-├── pyproject.toml          # Project configuration
+├── pyproject.toml          # Config & dependencies
 ├── src/
 │   ├── crossovers.py       # Crossover operators
-│   ├── data.py             # Data loading (yfinance)
-│   ├── evolution.py        # DEAP setup & NSGA-II runner
+│   ├── data.py             # Data fetching
+│   ├── evolution.py        # NSGA-II engine
 │   ├── mutations.py        # Mutation operators
-│   ├── plots.py            # Visualization functions
-│   ├── selections.py       # Selection operators
-│   └── utils.py            # Markowitz optimization & utilities
-├── notebooks/
-│   ├── data_analysis.ipynb
-│   └── portfolio_optimization.ipynb
-└── plots/                  # Generated experiment outputs
+│   ├── plots.py            # Visualization
+│   ├── selections.py       # Selection logic
+│   ├── tickers.py          # Asset sets
+│   └── utils.py            # Financial metrics & Markowitz
+├── notebooks/              # Interactive analysis
+└── plots/                  # Saved outputs
 ```
