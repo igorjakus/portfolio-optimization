@@ -53,6 +53,7 @@ TICKER_SETS = {
         "EFA",   # EAFE (Europe, Australia, Asia, Far East)
         "AGG",   # US Aggregate Bond
         "GLD",   # Gold
+        "IWM",   # Russell 2000 (Small Cap)
     ],
     "CRYPTO": [
         "BTC-USD", # Bitcoin

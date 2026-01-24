@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import random
 import yaml
 import numpy as np
 import pandas as pd
@@ -136,11 +137,18 @@ def parse_args():
         choices=["std", "mdd", "sharpe"],
         help="Risk metric: 'std' (volatility), 'mdd' (max drawdown), 'sharpe' (Sharpe ratio)",
     )
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    # Set random seeds
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        print(f"[INFO] Using random seed: {args.seed}")
 
     # Generate experiment ID
     now = datetime.now()
@@ -171,6 +179,7 @@ def main():
             "callback_interval": args.callback_interval,
             "show_plots": not args.no_plots,
             "risk_metric": args.risk_metric,
+            "seed": args.seed,
         },
     }
     config_path = os.path.join(output_dir, "config.yaml")
