@@ -15,7 +15,13 @@ def normalize_weights(weights: np.ndarray) -> np.ndarray:
     return weights / total
 
 
-def is_valid_portfolio(weights: np.ndarray, min_weight=0.0, max_weight=1.0, max_cardinality=None, epsilon=1e-6):
+def is_valid_portfolio(
+    weights: np.ndarray,
+    min_weight=0.0,
+    max_weight=1.0,
+    max_cardinality=None,
+    epsilon=1e-6,
+):
     """Checks if the portfolio weights sum to 1 and satisfy all constraints.
 
     Args:

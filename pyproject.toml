@@ -18,7 +18,8 @@ dependencies = [
     "yfinance>=1.0",
 ]
 
+[tool.ruff]
+line-length = 120
+
 [dependency-groups]
-dev = [
-    "ruff>=0.14.10",
-]
+dev = ["ruff>=0.14.10"]

@@ -8,11 +8,12 @@ from src.crossovers import arithmetic_crossover
 
 class FitnessMulti(base.Fitness):
     """Custom fitness class with hashability support for DEAP."""
+
     weights = (1.0, -1.0)
-    
+
     def __hash__(self):
         return hash(id(self))
-    
+
     def __eq__(self, other):
         return id(self) == id(other)
 
@@ -46,7 +47,12 @@ def setup_deap(stock_names, stock_returns_m, stock_covariances):
 
         return portfolio_return, portfolio_volatility
 
-    toolbox.register("evaluate", evaluate_portfolio, returns_m=stock_returns_m, covariances=stock_covariances)
+    toolbox.register(
+        "evaluate",
+        evaluate_portfolio,
+        returns_m=stock_returns_m,
+        covariances=stock_covariances,
+    )
 
     def mutate_wrapper(individual, gaussian_rate=0.3, gaussian_sigma=0.08, swap_rate=0.15):
         mutated = individual.reshape(1, -1).copy()
@@ -77,7 +83,15 @@ def setup_deap(stock_names, stock_returns_m, stock_covariances):
     return toolbox
 
 
-def run_nsga2(toolbox, pop_size=200, n_generations=150, cxpb=0.7, mutpb=0.6, callback=None, callback_interval=10):
+def run_nsga2(
+    toolbox,
+    pop_size=200,
+    n_generations=150,
+    cxpb=0.7,
+    mutpb=0.6,
+    callback=None,
+    callback_interval=10,
+):
     """Runs NSGA-II with optional callback every ``callback_interval`` generations."""
 
     pop = toolbox.population(n=pop_size)

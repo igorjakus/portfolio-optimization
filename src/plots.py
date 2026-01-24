@@ -197,7 +197,12 @@ def plot_efficient_frontier(stock_returns_m, stock_returns_s, p_m, p_s):
     axes[1, 1].grid(True, alpha=0.3)
     axes[1, 1].legend()
 
-    plt.suptitle("Markowitz Efficient Frontier - Multiple Views", fontsize=16, fontweight="bold", y=1.00)
+    plt.suptitle(
+        "Markowitz Efficient Frontier - Multiple Views",
+        fontsize=16,
+        fontweight="bold",
+        y=1.00,
+    )
     plt.tight_layout()
     plt.show()
 
@@ -210,7 +215,13 @@ def plot_portfolio_composition(weights, names, title="Skład portfela"):
 
     fig, ax = plt.subplots(figsize=(14, 7))
     colors = sns.color_palette("husl", len(filtered_weights))
-    bars = ax.bar(filtered_names, filtered_weights * 100, color=colors, edgecolor="black", linewidth=1)
+    bars = ax.bar(
+        filtered_names,
+        filtered_weights * 100,
+        color=colors,
+        edgecolor="black",
+        linewidth=1,
+    )
 
     for bar in bars:
         yval = bar.get_height()
@@ -242,7 +253,13 @@ def plot_final_portfolio(weights, names, title="Final Optimized Portfolio", outp
 
     fig, ax = plt.subplots(figsize=(14, 7))
     colors = sns.color_palette("husl", len(filtered_weights))
-    bars = ax.bar(filtered_names, filtered_weights * 100, color=colors, edgecolor="black", linewidth=1.5)
+    bars = ax.bar(
+        filtered_names,
+        filtered_weights * 100,
+        color=colors,
+        edgecolor="black",
+        linewidth=1.5,
+    )
 
     for bar in bars:
         yval = bar.get_height()
@@ -367,7 +384,13 @@ def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
     colors = sns.color_palette("husl", len(filtered_weights))
-    bars = ax1.bar(filtered_names, filtered_weights * 100, color=colors, edgecolor="black", linewidth=1)
+    bars = ax1.bar(
+        filtered_names,
+        filtered_weights * 100,
+        color=colors,
+        edgecolor="black",
+        linewidth=1,
+    )
 
     for bar in bars:
         yval = bar.get_height()
@@ -394,7 +417,13 @@ def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, 
     pareto_returns = [ind.fitness.values[0] for ind in pareto_front]
     pareto_risks = [ind.fitness.values[1] for ind in pareto_front]
     ax2.scatter(
-        pareto_risks, pareto_returns, color="#e74c3c", s=100, alpha=0.6, edgecolors="darkred", label="Pareto Front"
+        pareto_risks,
+        pareto_returns,
+        color="#e74c3c",
+        s=100,
+        alpha=0.6,
+        edgecolors="darkred",
+        label="Pareto Front",
     )
     ax2.scatter(
         portfolio_risk,
@@ -416,7 +445,14 @@ def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, 
     plt.show()
 
 
-def plot_portfolio_vs_baseline(prices_df, portfolio_weights, index_prices=None, title="Portfolio vs Index", output_dir=None, show=True):
+def plot_portfolio_vs_baseline(
+    prices_df,
+    portfolio_weights,
+    index_prices=None,
+    title="Portfolio vs Index",
+    output_dir=None,
+    show=True,
+):
     """Plots cumulative performance of a chosen portfolio versus an index benchmark.
 
     Args:
