@@ -1,7 +1,7 @@
 import numpy as np
 from deap import base, creator, tools, algorithms
 from tqdm import tqdm
-from src.utils import normalize_weights
+from src.utils import maximum_drawdown, normalize_weights , sharpe_ratio
 from src.mutations import gaussian_mutation, swap_mutation
 from src.crossovers import arithmetic_crossover
 
@@ -18,9 +18,20 @@ class FitnessMulti(base.Fitness):
         return id(self) == id(other)
 
 
-def setup_deap(stock_names, stock_returns_m, stock_covariances):
-    """Initializes DEAP toolbox with multiobjective setup."""
-    # Define fitness: maximize return, minimize risk
+def setup_deap(stock_names, stock_returns_m, stock_covariances, historical_returns=None, risk_metric="std"):
+    """Initializes DEAP toolbox with multiobjective setup.
+    
+    Args:
+        stock_names: List of stock ticker names
+        stock_returns_m: Mean returns for each stock
+        stock_covariances: Covariance matrix of stock returns
+        historical_returns: Historical returns array (n_days, n_assets) - required for mdd/sharpe
+        risk_metric: Risk metric to use - 'std' (volatility), 'mdd' (max drawdown), or 'sharpe'
+    """
+    if risk_metric in ("mdd", "sharpe") and historical_returns is None:
+        raise ValueError(f"historical_returns required for risk_metric='{risk_metric}'")
+    
+    # Define fitness: maximize return, minimize risk (or maximize sharpe)
     if not hasattr(creator, "Individual"):
         creator.create("Individual", np.ndarray, fitness=FitnessMulti)
 
@@ -33,7 +44,8 @@ def setup_deap(stock_names, stock_returns_m, stock_covariances):
     toolbox.register("individual", create_individual, n_assets=len(stock_names))
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-    def evaluate_portfolio(portfolio: np.ndarray, returns_m: np.ndarray, covariances: np.ndarray):
+    def evaluate_portfolio(portfolio: np.ndarray, returns_m: np.ndarray, covariances: np.ndarray, 
+                           hist_returns: np.ndarray, metric: str):
         if np.any(np.isnan(portfolio)) or np.any(np.isinf(portfolio)):
             return float("nan"), float("nan")
 
@@ -42,16 +54,31 @@ def setup_deap(stock_names, stock_returns_m, stock_covariances):
             portfolio = portfolio / weight_sum
 
         portfolio_return = np.dot(portfolio, returns_m)
-        portfolio_variance = portfolio @ covariances @ portfolio
-        portfolio_volatility = np.sqrt(max(0, portfolio_variance))
+        
+        if metric == "std":
+            portfolio_variance = portfolio @ covariances @ portfolio
+            risk_value = np.sqrt(max(0, portfolio_variance))
+        elif metric == "mdd":
+            # Calculate portfolio returns over time and MDD
+            portfolio_returns = hist_returns @ portfolio
+            risk_value = -maximum_drawdown(portfolio_returns)  # MDD is negative, we want positive
+        elif metric == "sharpe":
+            # For sharpe, we want to maximize it, so we negate it (since fitness minimizes 2nd objective)
+            portfolio_returns = hist_returns @ portfolio
+            sr = sharpe_ratio(portfolio_returns)
+            risk_value = -sr  # Negate so minimizing this = maximizing sharpe
+        else:
+            raise ValueError(f"Unknown risk metric: {metric}")
 
-        return portfolio_return, portfolio_volatility
+        return portfolio_return, risk_value
 
     toolbox.register(
         "evaluate",
         evaluate_portfolio,
         returns_m=stock_returns_m,
         covariances=stock_covariances,
+        hist_returns=historical_returns,
+        metric=risk_metric,
     )
 
     def mutate_wrapper(individual, gaussian_rate=0.3, gaussian_sigma=0.08, swap_rate=0.15):

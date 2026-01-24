@@ -40,6 +40,7 @@ def process_returns(prices_df: pd.DataFrame, delta_t=365) -> dict:
         "covariances": stock_covariances,
         "correlations": stock_correlations,
         "valid_tickers": valid_stocks.tolist(),
+        "historical_returns": analysis_period_clean,
     }
 
 

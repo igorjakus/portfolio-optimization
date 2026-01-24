@@ -129,6 +129,13 @@ def parse_args():
         action="store_true",
         help="Don't display plots during evolution (still saves them)",
     )
+    parser.add_argument(
+        "--risk-metric",
+        type=str,
+        default="std",
+        choices=["std", "mdd", "sharpe"],
+        help="Risk metric: 'std' (volatility), 'mdd' (max drawdown), 'sharpe' (Sharpe ratio)",
+    )
     return parser.parse_args()
 
 
@@ -163,6 +170,7 @@ def main():
             "mutation_prob": args.mutpb,
             "callback_interval": args.callback_interval,
             "show_plots": not args.no_plots,
+            "risk_metric": args.risk_metric,
         },
     }
     config_path = os.path.join(output_dir, "config.yaml")
@@ -180,10 +188,18 @@ def main():
     stock_returns_m = stats["returns_m"].loc[stock_names]
     stock_returns_s = stats["returns_s"].loc[stock_names]
     stock_covariances = stats["covariances"].loc[stock_names, stock_names]
+    historical_returns = stats["historical_returns"].loc[:, stock_names].values
 
     _, p_m, p_s = optimize_markowitz(stock_returns_m.values, stock_covariances.values, n_portfolios=500)
 
-    toolbox = setup_deap(stock_names, stock_returns_m.values, stock_covariances.values)
+    print(f"[INFO] Using risk metric: {args.risk_metric}")
+    toolbox = setup_deap(
+        stock_names, 
+        stock_returns_m.values, 
+        stock_covariances.values,
+        historical_returns=historical_returns,
+        risk_metric=args.risk_metric,
+    )
 
     benchmark_prices = load_benchmark(benchmark_ticker, start_date)
 
