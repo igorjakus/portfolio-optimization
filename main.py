@@ -203,8 +203,8 @@ def main():
 
     print(f"[INFO] Using risk metric: {args.risk_metric}")
     toolbox = setup_deap(
-        stock_names, 
-        stock_returns_m.values, 
+        stock_names,
+        stock_returns_m.values,
         stock_covariances.values,
         historical_returns=historical_returns,
         risk_metric=args.risk_metric,

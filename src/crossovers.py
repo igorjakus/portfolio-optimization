@@ -64,7 +64,7 @@ def dirichlet_blend_crossover(
     alpha: float = 0.5,
     concentration_power: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Performs a Dirichlet-based blend crossover.
+    r"""Performs a Dirichlet-based blend crossover.
 
     This method combines BLX-alpha exploration with the Dirichlet distribution's
     natural ability to satisfy the sum-to-one constraint.

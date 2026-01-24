@@ -1,4 +1,3 @@
-
 TICKER_SETS = {
     "WIG20": [
         "PKN.WA",  # Orlen
@@ -25,44 +24,44 @@ TICKER_SETS = {
     "US_TECH": [
         "AAPL",  # Apple
         "MSFT",  # Microsoft
-        "GOOGL", # Alphabet (Google)
+        "GOOGL",  # Alphabet (Google)
         "AMZN",  # Amazon
         "NVDA",  # Nvidia
         "META",  # Meta (Facebook)
         "TSLA",  # Tesla
-        "AMD",   # Advanced Micro Devices
+        "AMD",  # Advanced Micro Devices
         "INTC",  # Intel
-        "CRM",   # Salesforce
+        "CRM",  # Salesforce
     ],
     "US_DEFENSIVE": [
-        "KO",    # Coca-Cola
-        "PEP",   # PepsiCo
-        "PG",    # Procter & Gamble
-        "JNJ",   # Johnson & Johnson
-        "MCD",   # McDonald's
-        "WMT",   # Walmart
-        "VZ",    # Verizon
-        "MRK",   # Merck
-        "PFE",   # Pfizer
+        "KO",  # Coca-Cola
+        "PEP",  # PepsiCo
+        "PG",  # Procter & Gamble
+        "JNJ",  # Johnson & Johnson
+        "MCD",  # McDonald's
+        "WMT",  # Walmart
+        "VZ",  # Verizon
+        "MRK",  # Merck
+        "PFE",  # Pfizer
         "COST",  # Costco
     ],
     "ETFS": [
-        "SPY",   # S&P 500
-        "QQQ",   # Nasdaq 100
-        "EEM",   # Emerging Markets
-        "EFA",   # EAFE (Europe, Australia, Asia, Far East)
-        "AGG",   # US Aggregate Bond
-        "GLD",   # Gold
-        "IWM",   # Russell 2000 (Small Cap)
+        "SPY",  # S&P 500
+        "QQQ",  # Nasdaq 100
+        "EEM",  # Emerging Markets
+        "EFA",  # EAFE (Europe, Australia, Asia, Far East)
+        "AGG",  # US Aggregate Bond
+        "GLD",  # Gold
+        "IWM",  # Russell 2000 (Small Cap)
     ],
     "CRYPTO": [
-        "BTC-USD", # Bitcoin
-        "ETH-USD", # Ethereum
-        "SOL-USD", # Solana
-        "BNB-USD", # Binance Coin
-        "ADA-USD", # Cardano
-        "XRP-USD", # XRP
-    ]
+        "BTC-USD",  # Bitcoin
+        "ETH-USD",  # Ethereum
+        "SOL-USD",  # Solana
+        "BNB-USD",  # Binance Coin
+        "ADA-USD",  # Cardano
+        "XRP-USD",  # XRP
+    ],
 }
 
 DEFAULT_TICKER_SET = "WIG20"
