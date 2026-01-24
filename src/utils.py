@@ -120,3 +120,28 @@ def semivariance(returns: np.ndarray):
     mean_return = np.mean(returns)
     negative_deviations = returns[returns < mean_return] - mean_return
     return np.var(negative_deviations)
+
+
+def maximum_drawdown(returns: np.ndarray):
+    """Calculates maximum drawdown
+
+    Args:
+        returns (np.ndarray): Return rates
+    Returns:
+        float: Maximum drawdown value
+    """
+    cumulative = np.cumprod(1 + returns)
+    peak = np.maximum.accumulate(cumulative)
+    drawdowns = (cumulative - peak) / peak
+    return np.min(drawdowns)
+
+
+def sharpe_ratio(returns: np.ndarray):
+    """Calculates the Sharpe ratio of a portfolio.
+
+    Args:
+        returns (np.ndarray): Return rates
+    Returns:
+        float: Sharpe ratio
+    """
+    return np.mean(returns) / np.std(returns)
