@@ -145,3 +145,23 @@ def sharpe_ratio(returns: np.ndarray):
         float: Sharpe ratio
     """
     return np.mean(returns) / np.std(returns)
+
+
+def sortino_ratio(returns: np.ndarray, target_return: float = 0.0):
+    """Calculates the Sortino ratio of a portfolio.
+
+    Args:
+        returns (np.ndarray): Return rates
+        target_return (float, optional): Target return or risk-free rate. Defaults to 0.0.
+    Returns:
+        float: Sortino ratio
+    """
+    mean_return = np.mean(returns)
+    downside_diff = returns - target_return
+    downside_diff = downside_diff[downside_diff < 0]
+
+    if len(downside_diff) == 0:
+        return np.inf
+
+    downside_deviation = np.sqrt(np.mean(downside_diff**2))
+    return (mean_return - target_return) / downside_deviation
