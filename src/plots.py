@@ -389,72 +389,165 @@ def plot_performance_summary(
         plt.close()
 
 
-def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p_s, output_dir=None, show=True):
+def plot_pareto_vs_markowitz(
+    final_pop,
+    stock_returns_m,
+    stock_returns_s,
+    p_m,
+    p_s,
+    output_dir=None,
+    show=True,
+    risk_metric="std",
+    markowitz_custom_risk=None,
+    covariances=None,
+):
     """Visualizes the Pareto front found by NSGA-II against Markowitz efficient frontier."""
 
     pareto_front = tools.sortNondominated(final_pop, len(final_pop), first_front_only=True)[0]
     pareto_returns = np.array([ind.fitness.values[0] for ind in pareto_front])
-    pareto_risks = np.array([ind.fitness.values[1] for ind in pareto_front])
+    # Risk from fitness (could be std, mdd, or negative sharpe)
+    pareto_fitness_risks = np.array([ind.fitness.values[1] for ind in pareto_front])
 
     sort_idx = np.argsort(pareto_returns)
     pareto_returns_sorted = pareto_returns[sort_idx]
-    pareto_risks_sorted = pareto_risks[sort_idx]
+    pareto_fitness_risks_sorted = pareto_fitness_risks[sort_idx]
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    # === Left: Return vs Risk (Volatility) ===
-    axes[0].scatter(
-        stock_returns_s,
-        stock_returns_m,
-        color="#3498db",
-        s=100,
-        alpha=0.6,
-        edgecolors="black",
-        label="Individual stocks",
-    )
-    axes[0].plot(p_s, p_m, color="#2ecc71", linewidth=2.5, label="Markowitz Efficient Frontier")
-    axes[0].scatter(
-        pareto_risks_sorted,
-        pareto_returns_sorted,
-        color="#e74c3c",
-        s=150,
-        alpha=0.8,
-        edgecolors="darkred",
-        label="NSGA-II Pareto Front",
-    )
-    axes[0].set_xlabel("Standard Deviation of Return (Risk)", fontweight="bold")
-    axes[0].set_ylabel("Expected Return Rate", fontweight="bold")
-    axes[0].set_title("NSGA-II Pareto Front vs Markowitz EF", fontweight="bold")
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
+    if risk_metric == "std":
+        # === Case 1: Standard Deviation is the metric (Original Behavior) ===
+        
+        # Left: Full View
+        axes[0].scatter(
+            stock_returns_s,
+            stock_returns_m,
+            color="#3498db",
+            s=100,
+            alpha=0.6,
+            edgecolors="black",
+            label="Individual stocks",
+        )
+        axes[0].plot(p_s, p_m, color="#2ecc71", linewidth=2.5, label="Markowitz EF")
+        axes[0].scatter(
+            pareto_fitness_risks_sorted,
+            pareto_returns_sorted,
+            color="#e74c3c",
+            s=150,
+            alpha=0.8,
+            edgecolors="darkred",
+            label="NSGA-II Pareto Front",
+        )
+        axes[0].set_xlabel("Standard Deviation (Risk)", fontweight="bold")
+        axes[0].set_ylabel("Expected Return", fontweight="bold")
+        axes[0].set_title("NSGA-II vs Markowitz (Std Dev)", fontweight="bold")
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
 
-    # === Right: Zoomed view ===
-    axes[1].scatter(
-        stock_returns_s,
-        stock_returns_m,
-        color="#3498db",
-        s=100,
-        alpha=0.6,
-        edgecolors="black",
-        label="Individual stocks",
-    )
-    axes[1].plot(p_s, p_m, color="#2ecc71", linewidth=2.5, label="Markowitz Efficient Frontier")
-    axes[1].scatter(
-        pareto_risks_sorted,
-        pareto_returns_sorted,
-        color="#e74c3c",
-        s=150,
-        alpha=0.8,
-        edgecolors="darkred",
-        label="NSGA-II Pareto Front",
-    )
-    axes[1].set_xlim([0, 0.035])
-    axes[1].set_ylim([-0.005, 0.008])
-    axes[1].set_xlabel("Standard Deviation of Return (Risk)", fontweight="bold")
-    axes[1].set_ylabel("Expected Return Rate", fontweight="bold")
-    axes[1].set_title("NSGA-II vs Markowitz (Zoomed)", fontweight="bold")
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
+        # Right: Zoomed view
+        axes[1].scatter(
+            stock_returns_s,
+            stock_returns_m,
+            color="#3498db",
+            s=100,
+            alpha=0.6,
+            edgecolors="black",
+            label="Individual stocks",
+        )
+        axes[1].plot(p_s, p_m, color="#2ecc71", linewidth=2.5, label="Markowitz EF")
+        axes[1].scatter(
+            pareto_fitness_risks_sorted,
+            pareto_returns_sorted,
+            color="#e74c3c",
+            s=150,
+            alpha=0.8,
+            edgecolors="darkred",
+            label="NSGA-II Pareto Front",
+        )
+        # Auto-scale zoomed view roughly around the Pareto front
+        min_x, max_x = min(pareto_fitness_risks_sorted), max(pareto_fitness_risks_sorted)
+        min_y, max_y = min(pareto_returns_sorted), max(pareto_returns_sorted)
+        margin_x = (max_x - min_x) * 0.5 if max_x != min_x else 0.01
+        margin_y = (max_y - min_y) * 0.5 if max_y != min_y else 0.005
+        
+        axes[1].set_xlim([max(0, min_x - margin_x), max_x + margin_x])
+        axes[1].set_ylim([min_y - margin_y, max_y + margin_y])
+        
+        axes[1].set_xlabel("Standard Deviation (Risk)", fontweight="bold")
+        axes[1].set_ylabel("Expected Return", fontweight="bold")
+        axes[1].set_title("NSGA-II vs Markowitz (Zoomed)", fontweight="bold")
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+
+    else:
+        # === Case 2: Custom Metric (MDD, Sharpe, etc.) ===
+        
+        # --- Left Plot: Standard Deviation View ---
+        # We need to calculate Std Dev for Pareto individuals because their fitness is NOT Std Dev
+        if covariances is None:
+            print("[WARN] Covariances not provided, cannot plot Pareto on Std Dev axis correctly.")
+            pareto_std_devs = pareto_fitness_risks_sorted # Fallback (incorrect but prevents crash)
+        else:
+            pareto_std_devs = []
+            for ind in pareto_front:
+                w = np.array(ind)
+                # Risk = sqrt(w.T * Cov * w)
+                std_dev = np.sqrt(np.dot(w.T, np.dot(covariances, w)))
+                pareto_std_devs.append(std_dev)
+            
+            # Sort these by return to match the sorted returns array
+            pareto_std_devs = np.array(pareto_std_devs)[sort_idx]
+
+        axes[0].scatter(
+            stock_returns_s,
+            stock_returns_m,
+            color="#3498db",
+            s=100,
+            alpha=0.4,
+            edgecolors="black",
+            label="Stocks",
+        )
+        axes[0].plot(p_s, p_m, color="#2ecc71", linewidth=2.5, label="Markowitz EF")
+        axes[0].scatter(
+            pareto_std_devs,
+            pareto_returns_sorted,
+            color="#e74c3c",
+            s=120,
+            alpha=0.8,
+            edgecolors="darkred",
+            label="NSGA-II (Projected)",
+        )
+        axes[0].set_xlabel("Standard Deviation (Risk)", fontweight="bold")
+        axes[0].set_ylabel("Expected Return", fontweight="bold")
+        axes[0].set_title("Comparison on Std Dev (Markowitz Home Turf)", fontweight="bold")
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
+
+        # --- Right Plot: Custom Metric View ---
+        # Here we use the actual fitness values for Pareto (which ARE the custom metric)
+        # And we use the calculated custom metric for Markowitz
+        
+        if markowitz_custom_risk is not None:
+             axes[1].plot(markowitz_custom_risk, p_m, color="#2ecc71", linewidth=2.5, linestyle="--", label="Markowitz EF (Projected)")
+        
+        axes[1].scatter(
+            pareto_fitness_risks_sorted,
+            pareto_returns_sorted,
+            color="#e74c3c",
+            s=120,
+            alpha=0.8,
+            edgecolors="darkred",
+            label=f"NSGA-II ({risk_metric.upper()})",
+        )
+        
+        metric_label = "Max Drawdown" if risk_metric == "mdd" else risk_metric.upper()
+        if risk_metric == "sharpe":
+             metric_label = "Negative Sharpe Ratio"
+
+        axes[1].set_xlabel(f"{metric_label}", fontweight="bold")
+        axes[1].set_ylabel("Expected Return", fontweight="bold")
+        axes[1].set_title(f"Comparison on {metric_label} (Target Metric)", fontweight="bold")
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
     if output_dir:
@@ -465,7 +558,7 @@ def plot_pareto_vs_markowitz(final_pop, stock_returns_m, stock_returns_s, p_m, p
     else:
         plt.close()
 
-    return pareto_front, pareto_returns_sorted, pareto_risks_sorted
+    return pareto_front, pareto_returns_sorted, pareto_fitness_risks_sorted
 
 
 def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, p_m, p_s):

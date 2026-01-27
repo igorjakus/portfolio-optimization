@@ -17,7 +17,7 @@ from src.plots import (
     plot_final_portfolio,
     plot_performance_summary,
 )
-from src.utils import optimize_markowitz
+from src.utils import optimize_markowitz, maximum_drawdown, sharpe_ratio
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
@@ -76,6 +76,9 @@ def make_callback(
     index_prices=None,
     output_dir=None,
     show_plots=True,
+    risk_metric="std",
+    markowitz_custom_risk=None,
+    covariances=None,
 ):
     def _callback(gen, pop, logbook):
         if show_plots:
@@ -90,6 +93,9 @@ def make_callback(
             p_s,
             output_dir=output_dir,
             show=show_plots,
+            risk_metric=risk_metric,
+            markowitz_custom_risk=markowitz_custom_risk,
+            covariances=covariances,
         )
 
         best = max(pareto_front, key=lambda ind: ind.fitness.values[0])
@@ -203,7 +209,26 @@ def main():
     stock_covariances = stats["covariances"].loc[stock_names, stock_names]
     historical_returns = stats["historical_returns"].loc[:, stock_names].values
 
-    _, p_m, p_s = optimize_markowitz(stock_returns_m.values, stock_covariances.values, n_portfolios=500)
+    # Optimize Markowitz (returns weights, mean returns, volatilities)
+    p_weights, p_m, p_s = optimize_markowitz(stock_returns_m.values, stock_covariances.values, n_portfolios=500)
+
+    # Calculate custom risk metric for Markowitz portfolios if needed
+    markowitz_custom_risk = None
+    if args.risk_metric != "std":
+        print(f"[INFO] Calculating {args.risk_metric} for Markowitz frontier...")
+        markowitz_custom_risk = []
+        for w in p_weights.T:
+            portfolio_returns = historical_returns @ w
+            if args.risk_metric == "mdd":
+                # MDD is usually negative, we want positive magnitude or consistent sign
+                val = -maximum_drawdown(portfolio_returns)
+            elif args.risk_metric == "sharpe":
+                # Maximize sharpe => Minimize negative sharpe
+                val = -sharpe_ratio(portfolio_returns)
+            else:
+                val = 0.0
+            markowitz_custom_risk.append(val)
+        markowitz_custom_risk = np.array(markowitz_custom_risk)
 
     print(f"[INFO] Using risk metric: {args.risk_metric}")
     toolbox = setup_deap(
@@ -235,6 +260,9 @@ def main():
         benchmark_prices,
         output_dir=output_dir,
         show_plots=not args.no_plots,
+        risk_metric=args.risk_metric,
+        markowitz_custom_risk=markowitz_custom_risk,
+        covariances=stock_covariances.values,
     )
 
     pop_size = args.pop_size
@@ -265,6 +293,9 @@ def main():
         p_s,
         output_dir=output_dir,
         show=not args.no_plots,
+        risk_metric=args.risk_metric,
+        markowitz_custom_risk=markowitz_custom_risk,
+        covariances=stock_covariances.values,
     )
 
     plot_performance_summary(
