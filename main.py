@@ -13,8 +13,6 @@ from src.data import load_prices, process_returns
 from src.evolution import setup_deap, run_nsga2
 from src.plots import (
     plot_pareto_vs_markowitz,
-    plot_portfolio_vs_baseline,
-    plot_final_portfolio,
     plot_performance_summary,
 )
 from src.utils import optimize_markowitz, maximum_drawdown, sharpe_ratio
@@ -165,6 +163,7 @@ def main():
     exp_id = f"experiment-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}"
     output_dir = os.path.join("plots", exp_id)
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "portfolios"), exist_ok=True)
     print(f"Saving plots to: {output_dir}")
 
     tickers = TICKER_SETS[args.ticker_set]
@@ -237,6 +236,7 @@ def main():
         stock_covariances.values,
         historical_returns=historical_returns,
         risk_metric=args.risk_metric,
+        min_positions=min(3, len(stock_names)//2),
     )
 
     benchmark_prices = load_benchmark(benchmark_ticker, start_date)
@@ -282,8 +282,10 @@ def main():
     )
 
     pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
-    best = max(pareto_front, key=lambda ind: ind.fitness.values[0])
-    print(f"Final best: return={best.fitness.values[0]:.4f}, risk={best.fitness.values[1]:.4f}")
+    sorted_front = sorted(pareto_front, key=lambda ind: ind.fitness.values[0], reverse=True)
+    n_top = max(5, int(args.pop_size * 0.1))
+    top_candidates = sorted_front[:n_top]
+    print(f"Plotting top {len(top_candidates)} portfolios from the Pareto front...")
 
     plot_pareto_vs_markowitz(
         pareto_front,
@@ -298,15 +300,27 @@ def main():
         covariances=stock_covariances.values,
     )
 
-    plot_performance_summary(
-        prices,
-        np.array(best),
-        np.array(stock_names),
-        index_prices=benchmark_prices,
-        title="Final Portfolio Performance",
-        output_dir=output_dir,
-        show=not args.no_plots,
-    )
+    for i, ind in enumerate(top_candidates):
+        ret = ind.fitness.values[0]
+        risk = ind.fitness.values[1]
+
+        weights = np.array(ind)
+        holdings = [(name, w) for name, w in zip(stock_names, weights) if w > 0.1]
+        holdings.sort(key=lambda x: x[1], reverse=True)
+
+        print(f"\nCandidate #{i + 1}: Return={ret:.4f}, Risk={risk:.4f}")
+        print(f"Top holdings: {', '.join([f'{h[0]}: {h[1] * 100:.1f}%' for h in holdings[:5]])}")
+
+        plot_performance_summary(
+            prices,
+            weights,
+            np.array(stock_names),
+            index_prices=benchmark_prices,
+            title=f"Rank #{i + 1} Portfolio (Ret: {ret * 100:.1f}%)",
+            output_dir=output_dir,
+            show=not args.no_plots,
+            filename=f"portfolios/final_portfolio_rank_{i + 1:02d}.png"
+        )
 
 
 if __name__ == "__main__":
