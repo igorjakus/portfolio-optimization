@@ -24,6 +24,9 @@ def evaluate_portfolio(
     covariances: np.ndarray,
     hist_returns: np.ndarray,
     metric: str,
+    min_positions: int = 0,
+    penalty_factor: float = 0.1,
+    min_weight: float = 0.01,
 ):
     if np.any(np.isnan(portfolio)) or np.any(np.isinf(portfolio)):
         return float("nan"), float("nan")
@@ -48,6 +51,16 @@ def evaluate_portfolio(
         risk_value = -sr  # Negate so minimizing this = maximizing sharpe
     else:
         raise ValueError(f"Unknown risk metric: {metric}")
+
+    # Add penalty if portfolio is too small
+    active_positions = np.sum(portfolio > min_weight)
+    if active_positions < min_positions:
+        missing = min_positions - active_positions
+        tax_rate = missing * penalty_factor
+        penalty_amount = np.abs(portfolio_return) * tax_rate
+
+        portfolio_return -= penalty_amount
+        risk_value += (risk_value * tax_rate)
 
     return portfolio_return, risk_value
 
@@ -81,6 +94,9 @@ def setup_deap(
     stock_covariances,
     historical_returns=None,
     risk_metric="std",
+    min_positions=0,
+    min_weight=0.01,
+    penalty_factor=0.1,
     mutation_kwargs=None,
     crossover_kwargs=None,
 ):
@@ -92,6 +108,9 @@ def setup_deap(
         stock_covariances: Covariance matrix of stock returns
         historical_returns: Historical returns array (n_days, n_assets) - required for mdd/sharpe
         risk_metric: Risk metric to use - 'std' (volatility), 'mdd' (max drawdown), or 'sharpe'
+        min_positions: Minimum number of assets to use for portfolio before adding penalty.
+        min_weight: Minimum weight threshold for an asset to be considered an "active position" (e.g., 0.01 for 1% of portfolio).
+        penalty_factor: The penalty multiplier applied to return and risk for each missing position (e.g., 0.1 means 10% penalty per missing asset).
         mutation_kwargs: Dictionary of kwargs for the mutation function
         crossover_kwargs: Dictionary of kwargs for the crossover function
     """
@@ -118,6 +137,9 @@ def setup_deap(
         covariances=stock_covariances,
         hist_returns=historical_returns,
         metric=risk_metric,
+        min_positions=min_positions,
+        penalty_factor=penalty_factor,
+        min_weight=min_weight,
     )
 
     mut_kwargs = mutation_kwargs or {}
