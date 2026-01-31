@@ -1,2 +1,4 @@
 __pycache__/
 plots/experiment-*
+plots/wfo-*
+.DS_Store
