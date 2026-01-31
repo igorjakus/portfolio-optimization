@@ -79,6 +79,11 @@ def parse_args() -> Namespace:
     parser.add_argument("--use-smoothing", action="store_true", help="Apply moving average smoothing to prices")
     parser.add_argument("--fill-missing", action="store_true", help="Interpolate prices for missing calendar days")
     parser.add_argument(
+        "--no-fill-weekends",
+        action="store_true",
+        help="If --fill-missing is enabled, do NOT interpolate for weekend days (only interpolate for weekdays).",
+    )
+    parser.add_argument(
         "--transaction-cost", type=float, default=0.0025, help="Transaction cost per rebalance (e.g. 0.0025 = 0.25%%)"
     )
     parser.add_argument(
@@ -181,6 +186,7 @@ def main():
                 train_prices,
                 apply_smoothing=args.use_smoothing,
                 fill_missing=args.fill_missing,
+                fill_weekends=not args.no_fill_weekends,
                 volume_df=train_volumes,
                 min_liquidity=args.min_liquidity,
             )

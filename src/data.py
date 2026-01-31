@@ -30,20 +30,23 @@ def load_raw_data(tickers, start="2020-01-01") -> pd.DataFrame:
     return data
 
 
-def fill_missing_dates(prices: pd.DataFrame, method: str = "linear") -> pd.DataFrame:
-    """Reindexes prices to include all calendar days and interpolates missing values.
+def fill_missing_dates(prices: pd.DataFrame, method: str = "linear", fill_weekends: bool = True) -> pd.DataFrame:
+    """Reindexes prices to include all calendar days (or business days) and interpolates missing values.
 
     Args:
         prices: DataFrame with DateTime index.
         method: Interpolation method ('linear', 'ffill', etc.). Defaults to 'linear'.
+        fill_weekends: If True, reindexes to include all calendar days (freq='D');
+                       otherwise, reindexes only to business days (freq='B').
 
     Returns:
-        pd.DataFrame: DataFrame with daily frequency and interpolated values.
+        pd.DataFrame: DataFrame with daily or business day frequency and interpolated values.
     """
     if prices.empty:
         return prices
 
-    all_days = pd.date_range(start=prices.index.min(), end=prices.index.max(), freq="D")
+    freq = "D" if fill_weekends else "B"
+    all_days = pd.date_range(start=prices.index.min(), end=prices.index.max(), freq=freq)
     prices = prices.reindex(all_days)
 
     if method == "linear":
@@ -75,6 +78,7 @@ def process_returns(
     apply_smoothing: bool = False,
     smoothing_window: int = 5,
     fill_missing: bool = False,
+    fill_weekends: bool = True, # New parameter
     volume_df: pd.DataFrame | None = None,
     min_liquidity: float = 0.0,
 ) -> dict:
@@ -93,10 +97,10 @@ def process_returns(
         dict: Dictionary containing returns statistics and historical data.
     """
     if fill_missing:
-        prices_df = fill_missing_dates(prices_df)
+        prices_df = fill_missing_dates(prices_df, fill_weekends=fill_weekends)
         if volume_df is not None:
             volume_df = fill_missing_dates(
-                volume_df, method="ffill"
+                volume_df, method="ffill", fill_weekends=fill_weekends
             )  # Volume shouldn't be linearly interpolated typically
 
     if apply_smoothing:

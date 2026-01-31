@@ -13,6 +13,7 @@ SEED=42
 
 USE_SMOOTHING="--use-smoothing" # Enable price smoothing
 FILL_MISSING="--fill-missing"     # Enable missing day interpolation
+NO_FILL_WEEKENDS="" # Set to "--no-fill-weekends" to disable weekend interpolation when --fill-missing is enabled
 TRANS_COST="0.0025"               # Transaction cost (0.25%)
 MIN_LIQ="500000"                  # Min Daily Turnover (PLN) to be investable
 QUIET=""                          # Set to "--quiet" for less output
@@ -22,7 +23,7 @@ echo "Starting Portfolio Optimization Pipeline"
 echo "Strategy: NSGA-II Walk-Forward Optimization"
 echo "Tickers: $TICKER_SET | Metric: $RISK_METRIC"
 echo "Window: $TRAIN_WINDOW days | Rebalance: $REBALANCE_FREQ days"
-echo "Cost: $TRANS_COST | Min Liq: $MIN_LIQ | Missing Fill: ${FILL_MISSING:-Disabled}"
+echo "Cost: $TRANS_COST | Min Liq: $MIN_LIQ | Missing Fill: ${FILL_MISSING:-Disabled} | Weekend Fill: ${NO_FILL_WEEKENDS:-Enabled}"
 echo "Seed: $SEED"
 echo "========================================================"
 
@@ -39,6 +40,7 @@ uv run main.py \
     --seed "$SEED" \
     $USE_SMOOTHING \
     $FILL_MISSING \
+    $NO_FILL_WEEKENDS \
     $QUIET
 
 echo "========================================================"
