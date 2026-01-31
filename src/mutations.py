@@ -61,8 +61,6 @@ def swap_mutation(population: np.ndarray, mutation_rate: float = 0.1) -> np.ndar
         If input violates these constraints, swap will not fix them.
     """
     population = population.copy()  # Work on a copy to avoid modifying input
-    # TODO: check whether it's detrimental to performance
-
     pop_size, n_assets = population.shape
 
     # Determine which individuals will be mutated
@@ -98,8 +96,7 @@ def transfer_mutation(population: np.ndarray, mutation_rate: float = 0.2, flow_a
         population (np.ndarray): Population of portfolios (shape: pop_size x n_assets)
         mutation_rate (float): Probability of mutation for each individual. Defaults to 0.2.
         flow_amount (float): Amount of weight to transfer between assets. Defaults to 0.05.
-        TODO: make flow_amount relative to current weight?
-        TODO: make flow_amount learnable parameter?
+
 
     Returns:
         np.ndarray: Mutated population (new copy)

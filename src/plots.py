@@ -2,10 +2,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import pandas as pd
+import imageio.v2 as imageio
 from IPython.display import clear_output
 import os
 
 import deap.tools as tools
+from src.utils import (
+    cagr,
+    portfolio_std_dev,
+    correlation_with_benchmark,
+    calculate_turnover,
+    sharpe_ratio,
+    sortino_ratio,
+    semivariance,
+    calculate_rolling_annual_returns,
+    max_drawdown_duration,
+)  # New imports
 
 
 def plot_close_price(stock_name, prices):
@@ -24,7 +36,6 @@ def plot_close_price(stock_name, prices):
 
 def plot_returns_and_risk(stock_returns_m, stock_returns_s):
     """Plots expected returns and risk (variance) for stocks."""
-    # expected return
     plt.figure(figsize=(14, 6))
     plt.bar(stock_returns_m.index, 100.0 * stock_returns_m, color="steelblue", alpha=0.8)
     plt.title("Expected Return Rate (%)", fontsize=14)
@@ -35,7 +46,6 @@ def plot_returns_and_risk(stock_returns_m, stock_returns_s):
     plt.tight_layout()
     plt.show()
 
-    # variance
     plt.figure(figsize=(14, 6))
     plt.bar(stock_returns_s.index, stock_returns_s**2, color="indianred", alpha=0.8)
     plt.title("Variance of Return Rate (Risk)", fontsize=14)
@@ -76,7 +86,6 @@ def plot_dominance(stock_returns_m, stock_returns_s):
 
     fig, ax = plt.subplots(figsize=(13, 8))
 
-    # Dominated
     ax.scatter(
         stock_returns_s[is_dominated == 1],
         100.0 * stock_returns_m[is_dominated == 1],
@@ -88,7 +97,6 @@ def plot_dominance(stock_returns_m, stock_returns_s):
         linewidth=1,
     )
 
-    # Non-dominated
     ax.scatter(
         stock_returns_s[is_dominated == 0],
         100.0 * stock_returns_m[is_dominated == 0],
@@ -100,7 +108,6 @@ def plot_dominance(stock_returns_m, stock_returns_s):
         linewidth=1.5,
     )
 
-    # Adding stock labels
     for i, txt in enumerate(stock_returns_m.index):
         ax.annotate(
             txt,
@@ -125,7 +132,6 @@ def plot_efficient_frontier(stock_returns_m, stock_returns_s, p_m, p_s):
     """Visualizes the Markowitz efficient frontier."""
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
-    # Top-left: Variance vs Return (full range)
     axes[0, 0].scatter(
         stock_returns_s**2,
         stock_returns_m,
@@ -142,7 +148,6 @@ def plot_efficient_frontier(stock_returns_m, stock_returns_s, p_m, p_s):
     axes[0, 0].grid(True, alpha=0.3)
     axes[0, 0].legend()
 
-    # Top-right: Variance vs Return (zoomed)
     axes[0, 1].scatter(
         stock_returns_s**2,
         stock_returns_m,
@@ -161,7 +166,6 @@ def plot_efficient_frontier(stock_returns_m, stock_returns_s, p_m, p_s):
     axes[0, 1].grid(True, alpha=0.3)
     axes[0, 1].legend()
 
-    # Bottom-left: Volatility vs Return (full range)
     axes[1, 0].scatter(
         stock_returns_s,
         stock_returns_m,
@@ -178,7 +182,6 @@ def plot_efficient_frontier(stock_returns_m, stock_returns_s, p_m, p_s):
     axes[1, 0].grid(True, alpha=0.3)
     axes[1, 0].legend()
 
-    # Bottom-right: Volatility vs Return (zoomed)
     axes[1, 1].scatter(
         stock_returns_s,
         stock_returns_m,
@@ -298,20 +301,15 @@ def plot_performance_summary(
     output_dir=None,
     show=True,
     filename="performance_summary.png",
+    test_start_date=None,
 ):
     """
     Plots cumulative performance (Left) and portfolio composition (Right) side-by-side.
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 7))
 
-    # ==========================
-    # LEFT PLOT: Cumulative Performance
-    # ==========================
     prices_df = pd.DataFrame(prices_df).copy()
     weights = np.asarray(portfolio_weights, dtype=float)
-    
-    # Normalize weights just in case
-    weights = weights / np.sum(weights)
 
     returns = prices_df.pct_change().dropna()
     portfolio_curve = (1 + returns.values.dot(weights)).cumprod()
@@ -319,7 +317,6 @@ def plot_performance_summary(
     curves = pd.DataFrame({"Portfolio": portfolio_curve}, index=returns.index)
 
     if index_prices is not None:
-        # Align benchmark
         index_series = pd.Series(index_prices)
         index_aligned = index_series.reindex(prices_df.index).ffill().bfill()
         index_returns = index_aligned.pct_change().reindex(returns.index).fillna(0)
@@ -329,6 +326,20 @@ def plot_performance_summary(
     for col in curves.columns:
         ax1.plot(curves.index, curves[col], linewidth=2, label=col)
 
+    if test_start_date is not None and test_start_date in curves.index:
+        ax1.axvline(test_start_date, color="red", linestyle="--", linewidth=1.5, label="Start of Test Period")
+        ax1.axvspan(test_start_date, curves.index[-1], color="red", alpha=0.05)
+        ax1.text(
+            test_start_date,
+            ax1.get_ylim()[1],
+            " Out-of-Sample",
+            color="red",
+            ha="left",
+            va="top",
+            rotation=90,
+            fontweight="bold",
+        )
+
     ax1.axhline(1.0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
     ax1.set_title("Cumulative Return vs Benchmark", fontweight="bold", fontsize=14)
     ax1.set_xlabel("Date", fontsize=12)
@@ -336,9 +347,6 @@ def plot_performance_summary(
     ax1.grid(True, linestyle="--", alpha=0.4)
     ax1.legend(fontsize=12)
 
-    # ==========================
-    # RIGHT PLOT: Composition
-    # ==========================
     mask = np.abs(weights) > 0.01
     filtered_weights = weights[mask]
     filtered_names = stock_names[mask]
@@ -369,20 +377,16 @@ def plot_performance_summary(
     ax2.set_ylabel("Weight (%)", fontsize=12)
     ax2.axhline(0, color="black", linewidth=0.8)
     ax2.grid(axis="y", alpha=0.3)
-    
-    # Rotate x-labels on the right plot
+
     plt.setp(ax2.get_xticklabels(), rotation=45, ha="right", fontsize=11)
 
-    # ==========================
-    # FINALIZE
-    # ==========================
     plt.suptitle(title, fontsize=18, fontweight="bold", y=0.98)
     plt.tight_layout()
-    
+
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
         plt.savefig(os.path.join(output_dir, filename), dpi=150)
-    
+
     if show:
         plt.show()
     else:
@@ -415,9 +419,6 @@ def plot_pareto_vs_markowitz(
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     if risk_metric == "std":
-        # === Case 1: Standard Deviation is the metric (Original Behavior) ===
-        
-        # Left: Full View
         axes[0].scatter(
             stock_returns_s,
             stock_returns_m,
@@ -443,7 +444,6 @@ def plot_pareto_vs_markowitz(
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
 
-        # Right: Zoomed view
         axes[1].scatter(
             stock_returns_s,
             stock_returns_m,
@@ -463,15 +463,14 @@ def plot_pareto_vs_markowitz(
             edgecolors="darkred",
             label="NSGA-II Pareto Front",
         )
-        # Auto-scale zoomed view roughly around the Pareto front
         min_x, max_x = min(pareto_fitness_risks_sorted), max(pareto_fitness_risks_sorted)
         min_y, max_y = min(pareto_returns_sorted), max(pareto_returns_sorted)
         margin_x = (max_x - min_x) * 0.5 if max_x != min_x else 0.01
         margin_y = (max_y - min_y) * 0.5 if max_y != min_y else 0.005
-        
+
         axes[1].set_xlim([max(0, min_x - margin_x), max_x + margin_x])
         axes[1].set_ylim([min_y - margin_y, max_y + margin_y])
-        
+
         axes[1].set_xlabel("Standard Deviation (Risk)", fontweight="bold")
         axes[1].set_ylabel("Expected Return", fontweight="bold")
         axes[1].set_title("NSGA-II vs Markowitz (Zoomed)", fontweight="bold")
@@ -479,22 +478,16 @@ def plot_pareto_vs_markowitz(
         axes[1].grid(True, alpha=0.3)
 
     else:
-        # === Case 2: Custom Metric (MDD, Sharpe, etc.) ===
-        
-        # --- Left Plot: Standard Deviation View ---
-        # We need to calculate Std Dev for Pareto individuals because their fitness is NOT Std Dev
         if covariances is None:
             print("[WARN] Covariances not provided, cannot plot Pareto on Std Dev axis correctly.")
-            pareto_std_devs = pareto_fitness_risks_sorted # Fallback (incorrect but prevents crash)
+            pareto_std_devs = pareto_fitness_risks_sorted
         else:
             pareto_std_devs = []
             for ind in pareto_front:
                 w = np.array(ind)
-                # Risk = sqrt(w.T * Cov * w)
                 std_dev = np.sqrt(np.dot(w.T, np.dot(covariances, w)))
                 pareto_std_devs.append(std_dev)
-            
-            # Sort these by return to match the sorted returns array
+
             pareto_std_devs = np.array(pareto_std_devs)[sort_idx]
 
         axes[0].scatter(
@@ -522,13 +515,16 @@ def plot_pareto_vs_markowitz(
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
 
-        # --- Right Plot: Custom Metric View ---
-        # Here we use the actual fitness values for Pareto (which ARE the custom metric)
-        # And we use the calculated custom metric for Markowitz
-        
         if markowitz_custom_risk is not None:
-             axes[1].plot(markowitz_custom_risk, p_m, color="#2ecc71", linewidth=2.5, linestyle="--", label="Markowitz EF (Projected)")
-        
+            axes[1].plot(
+                markowitz_custom_risk,
+                p_m,
+                color="#2ecc71",
+                linewidth=2.5,
+                linestyle="--",
+                label="Markowitz EF (Projected)",
+            )
+
         axes[1].scatter(
             pareto_fitness_risks_sorted,
             pareto_returns_sorted,
@@ -538,10 +534,10 @@ def plot_pareto_vs_markowitz(
             edgecolors="darkred",
             label=f"NSGA-II ({risk_metric.upper()})",
         )
-        
+
         metric_label = "Max Drawdown" if risk_metric == "mdd" else risk_metric.upper()
         if risk_metric == "sharpe":
-             metric_label = "Negative Sharpe Ratio"
+            metric_label = "Negative Sharpe Ratio"
 
         axes[1].set_xlabel(f"{metric_label}", fontweight="bold")
         axes[1].set_ylabel("Expected Return", fontweight="bold")
@@ -645,6 +641,7 @@ def plot_portfolio_vs_baseline(
     title="Portfolio vs Index",
     output_dir=None,
     show=True,
+    test_start_date=None,
 ):
     """Plots cumulative performance of a chosen portfolio versus an index benchmark.
 
@@ -655,6 +652,7 @@ def plot_portfolio_vs_baseline(
         title (str, optional): Plot title. Defaults to "Portfolio vs Index".
         output_dir (str, optional): Directory to save the plot. If provided, plot is saved as PNG.
         show (bool, optional): Whether to display the plot. Defaults to True.
+        test_start_date (datetime/str, optional): Date where the test period begins (draws a vertical line).
 
     Returns:
         pd.DataFrame: Cumulative growth series for portfolio and benchmark (if provided).
@@ -678,19 +676,31 @@ def plot_portfolio_vs_baseline(
     )
 
     if index_prices is not None:
-        # Align benchmark to the same date range and compute cumulative growth
         index_series = pd.Series(index_prices)
-        # Reindex to portfolio dates, forward-fill missing
         index_aligned = index_series.reindex(prices_df.index).ffill().bfill()
-        # Compute returns starting from the first valid return date
         index_returns = index_aligned.pct_change().reindex(returns.index).fillna(0)
-        # Normalize to start at 1 (same as portfolio)
         index_cumulative = (1 + index_returns).cumprod()
         curves["Index"] = index_cumulative.values
 
     plt.figure(figsize=(12, 6))
     for col in curves.columns:
         plt.plot(curves.index, curves[col], linewidth=2, label=col)
+
+    # Add Train/Test Split Line
+    if test_start_date is not None and test_start_date in curves.index:
+        plt.axvline(test_start_date, color="red", linestyle="--", linewidth=1.5, label="Start of Test Period")
+        # Shade the test area
+        plt.axvspan(test_start_date, curves.index[-1], color="red", alpha=0.05)
+        plt.text(
+            test_start_date,
+            plt.ylim()[1],
+            " Out-of-Sample",
+            color="red",
+            ha="left",
+            va="top",
+            rotation=90,
+            fontweight="bold",
+        )
 
     plt.axhline(1.0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
     plt.title(title, fontweight="bold")
@@ -709,3 +719,381 @@ def plot_portfolio_vs_baseline(
         plt.close()
 
     return curves
+
+
+def _calculate_portfolio_metrics(
+    equity_series: pd.Series,
+    returns_series: pd.Series,
+    portfolio_history: list[dict] | None = None,
+    aligned_returns_with_benchmark: pd.DataFrame | None = None,
+    is_benchmark: bool = False,
+) -> dict:
+    """Calculates key performance metrics for a given equity curve.
+
+    Args:
+        equity_series: A pandas Series of cumulative returns.
+        returns_series: A pandas Series of daily returns.
+        portfolio_history: List of dicts with portfolio composition history (for turnover).
+        aligned_returns_with_benchmark: DataFrame with aligned portfolio and benchmark returns,
+                                        used for correlation if not a benchmark itself.
+        is_benchmark: True if calculating metrics for the benchmark, False for portfolio.
+
+    Returns:
+        dict: A dictionary of calculated performance metrics.
+    """
+    metrics = {}
+
+    if equity_series.empty or returns_series.empty:
+        # Assign default 0.0 or appropriate value for all metrics
+        return {
+            "total_ret": 0.0,
+            "cagr": 0.0,
+            "std": 0.0,
+            "mdd": 0.0,
+            "sharpe": 0.0,
+            "sortino": 0.0,
+            "semi_var": 0.0,
+            "downside_dev": 0.0,
+            "best_year": 0.0,
+            "worst_year": 0.0,
+            "dd_duration": 0.0,
+            "turnover": 0.0,
+            "corr": 0.0,
+        }
+
+    metrics["total_ret"] = (equity_series.iloc[-1] / equity_series.iloc[0]) - 1
+    metrics["cagr"] = cagr(equity_series)
+    metrics["std"] = portfolio_std_dev(equity_series)
+    metrics["mdd"] = (equity_series / equity_series.cummax() - 1).min()
+
+    float_returns = returns_series.values.astype(float)
+    metrics["sharpe"] = sharpe_ratio(float_returns)
+    metrics["sortino"] = sortino_ratio(float_returns)
+    metrics["semi_var"] = semivariance(float_returns)
+    metrics["downside_dev"] = np.sqrt(metrics["semi_var"]) * np.sqrt(252)
+
+    metrics["best_year"], metrics["worst_year"] = calculate_rolling_annual_returns(equity_series)
+    metrics["dd_duration"] = max_drawdown_duration(equity_series)
+
+    if not is_benchmark and portfolio_history is not None:
+        metrics["turnover"] = calculate_turnover(portfolio_history)
+    else:
+        metrics["turnover"] = 0.0  # Benchmark doesn't have turnover
+
+    if not is_benchmark and aligned_returns_with_benchmark is not None and not aligned_returns_with_benchmark.empty:
+        metrics["corr"] = correlation_with_benchmark(
+            aligned_returns_with_benchmark["portfolio"], aligned_returns_with_benchmark["benchmark"]
+        )
+    else:
+        metrics["corr"] = 0.0  # Benchmark correlation to itself is 1, but we represent it as N/A
+
+    return metrics
+
+
+def generate_wfo_factsheet(
+    portfolio_equity: pd.Series,
+    benchmark_equity: pd.Series,
+    risk_metric: str,
+    train_window: int,
+    rebalance_freq: int,
+    portfolio_history: list[dict],  # Required for turnover
+    ticker_set_name: str,
+    benchmark_name: str,
+    output_dir: str | None = None,
+    show: bool = True,
+):
+    """Generates a comprehensive factsheet for Walk-Forward Optimization results.
+
+    The factsheet includes:
+    1. Equity curve comparison (Portfolio vs Benchmark).
+    2. Drawdown curve comparison.
+    3. Table of key performance metrics for both Portfolio and Benchmark.
+
+    Args:
+        portfolio_equity: A pandas Series of portfolio cumulative returns.
+        benchmark_equity: A pandas Series of benchmark cumulative returns.
+        risk_metric: The risk metric used for optimization (e.g., 'mdd', 'sharpe').
+        train_window: Training window size in days.
+        rebalance_freq: Rebalancing frequency in days.
+        portfolio_history: List of dicts with portfolio composition history (for turnover).
+        ticker_set_name: Name of the ticker set used (e.g. 'WIG20').
+        benchmark_name: Name of the benchmark ticker (e.g. '^WIG20').
+        output_dir: Directory to save the factsheet.
+        show: Whether to display the plot.
+    """
+
+    pf_returns = portfolio_equity.pct_change().dropna()
+    bm_returns = benchmark_equity.pct_change().dropna()
+
+    # Align returns for correlation calculation
+    aligned_returns = pd.DataFrame({"portfolio": pf_returns, "benchmark": bm_returns}).dropna()
+
+    # Calculate metrics using the helper function
+    port_metrics = _calculate_portfolio_metrics(
+        portfolio_equity, pf_returns, portfolio_history, aligned_returns, is_benchmark=False
+    )
+    bench_metrics = _calculate_portfolio_metrics(
+        benchmark_equity, bm_returns, aligned_returns_with_benchmark=aligned_returns, is_benchmark=True
+    )
+
+    port_metrics["corr"]  # Special case: correlation is against benchmark, so calculated once.
+
+    print("\n" + "=" * 50)
+    print(f" WFO RESULTS SUMMARY ({risk_metric.upper()})")
+    print(f" Tickers: {ticker_set_name} | Benchmark: {benchmark_name}")
+    print("=" * 50)
+    print(f"{'Metric':<30} | {'Portfolio':<15} | {'Benchmark':<15}")
+    print("-" * 50)
+    print(
+        f"{'Total Return':<30} | {port_metrics['total_ret'] * 100:14.2f}% | {bench_metrics['total_ret'] * 100:14.2f}%"
+    )
+    print(
+        f"{'Compound Annual Growth Rate':<30} | {port_metrics['cagr'] * 100:14.2f}% | {bench_metrics['cagr'] * 100:14.2f}%"
+    )
+    print(f"{'Annualized Volatility':<30} | {port_metrics['std'] * 100:14.2f}% | {bench_metrics['std'] * 100:14.2f}%")
+    print(f"{'Max Drawdown':<30} | {port_metrics['mdd'] * 100:14.2f}% | {bench_metrics['mdd'] * 100:14.2f}%")
+    print(
+        f"{'Best 365 Days':<30} | {port_metrics['best_year'] * 100:14.2f}% | {bench_metrics['best_year'] * 100:14.2f}%"
+    )
+    print(
+        f"{'Worst 365 Days':<30} | {port_metrics['worst_year'] * 100:14.2f}% | {bench_metrics['worst_year'] * 100:14.2f}%"
+    )
+    print(f"{'Sharpe Ratio':<30} | {port_metrics['sharpe']:14.2f} | {bench_metrics['sharpe']:14.2f}")
+    print(f"{'Sortino Ratio':<30} | {port_metrics['sortino']:14.2f} | {bench_metrics['sortino']:14.2f}")
+    print(f"{'Semivariance':<30} | {port_metrics['semi_var']:14.2f} | {bench_metrics['semi_var']:14.2f}")
+    print(f"{'Correlation':<30} | {port_metrics['corr']:14.2f} | {'N/A':>15}")
+    print(f"{'Avg Turnover per Rebalance':<30} | {port_metrics['turnover'] * 100:14.2f}% | {'N/A':>15}")
+    print("=" * 50 + "\n")
+
+    fig = plt.figure(figsize=(16, 14))
+    gs = fig.add_gridspec(3, 1, height_ratios=[3, 1, 1.2], hspace=0.3)
+
+    ax0 = fig.add_subplot(gs[0, 0])
+    ax0.plot(
+        portfolio_equity.index,
+        portfolio_equity.values.astype(float),
+        label="WFO Portfolio",
+        color="#2c3e50",
+        linewidth=2,
+    )
+    if not benchmark_equity.empty:
+        ax0.plot(
+            benchmark_equity.index,
+            benchmark_equity.values.astype(float),
+            label=f"Benchmark ({benchmark_name})",
+            color="#95a5a6",
+            linestyle="--",
+        )
+    ax0.set_title(f"Walk-Forward Optimization: Equity Curve ({risk_metric.upper()})", fontweight="bold", fontsize=14)
+    ax0.set_ylabel("Growth of $1", fontsize=12)
+    ax0.grid(True, alpha=0.3)
+    ax0.legend(loc="upper left", fontsize=10)
+
+    ax1 = fig.add_subplot(gs[1, 0], sharex=ax0)
+    pf_drawdown = portfolio_equity / portfolio_equity.cummax() - 1
+    bm_drawdown = benchmark_equity / benchmark_equity.cummax() - 1
+
+    ax1.plot(
+        pf_drawdown.index, pf_drawdown.values.astype(float), label="Portfolio Drawdown", color="#e74c3c", linewidth=2
+    )
+    if not benchmark_equity.empty:
+        ax1.plot(
+            bm_drawdown.index,
+            bm_drawdown.values.astype(float),
+            label="Benchmark Drawdown",
+            color="#f39c12",
+            linestyle="--",
+        )
+    ax1.fill_between(pf_drawdown.index, pf_drawdown.values.astype(float), 0, color="#e74c3c", alpha=0.1)
+    ax1.fill_between(bm_drawdown.index, bm_drawdown.values.astype(float), 0, color="#f39c12", alpha=0.05)
+    ax1.set_title("Drawdown", fontweight="bold", fontsize=12)
+    ax1.set_ylabel("Drawdown (%)", fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc="lower left", fontsize=10)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+
+    ax2 = fig.add_subplot(gs[2, 0])
+    ax2.set_axis_off()
+
+    metrics_data = [
+        ["Total Return", f"{port_metrics['total_ret']:.2%}", f"{bench_metrics['total_ret']:.2%}"],
+        ["Comp. Annual Growth Rate", f"{port_metrics['cagr']:.2%}", f"{bench_metrics['cagr']:.2%}"],
+        ["Ann. Volatility", f"{port_metrics['std']:.2%}", f"{bench_metrics['std']:.2%}"],
+        ["Ann. Downside Deviation", f"{port_metrics['downside_dev']:.2%}", f"{bench_metrics['downside_dev']:.2%}"],
+        ["Max Drawdown", f"{port_metrics['mdd']:.2%}", f"{bench_metrics['mdd']:.2%}"],
+        ["Max DD Duration (Days)", f"{port_metrics['dd_duration']:.0f}", f"{bench_metrics['dd_duration']:.0f}"],
+        ["Best 365 Days", f"{port_metrics['best_year']:.2%}", f"{bench_metrics['best_year']:.2%}"],
+        ["Worst 365 Days", f"{port_metrics['worst_year']:.2%}", f"{bench_metrics['worst_year']:.2%}"],
+        ["Sharpe Ratio", f"{port_metrics['sharpe']:.2f}", f"{bench_metrics['sharpe']:.2f}"],
+        ["Sortino Ratio", f"{port_metrics['sortino']:.2f}", f"{bench_metrics['sortino']:.2f}"],
+        ["Correlation", f"{port_metrics['corr']:.2f}", "N/A"],
+        ["Avg Turnover", f"{port_metrics['turnover']:.2%}", "N/A"],
+    ]
+    col_labels = ["Metric", "Portfolio", "Benchmark"]
+
+    table = ax2.table(
+        cellText=metrics_data, colLabels=col_labels, loc="center", cellLoc="center", bbox=(0.0, 0.0, 1.0, 1.0)
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.5)
+
+    plt.suptitle(
+        f"Walk-Forward Optimization Report\nTicker Set: {ticker_set_name} | Benchmark: {benchmark_name} | Metric: {risk_metric.upper()}\nWindow: {train_window} days | Rebalance: {rebalance_freq} days",
+        fontweight="bold",
+        fontsize=16,
+    )
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.88)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, "wfo_factsheet.png"), dpi=200)
+        print(f"Saved WFO factsheet to {output_dir}/wfo_factsheet.png")
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
+def create_portfolio_gif(portfolio_history: list, output_dir: str):
+    """Generates an animated GIF of portfolio composition changes over time.
+
+    Args:
+        portfolio_history: List of dicts with keys 'date', 'weights', 'tickers'.
+        output_dir: Directory to save the GIF.
+    """
+    print("[INFO] Generating portfolio evolution GIF...")
+    frames = []
+    temp_frames_dir = os.path.join(output_dir, "temp_frames")
+    os.makedirs(temp_frames_dir, exist_ok=True)
+
+    for i, step in enumerate(portfolio_history):
+        d = step["date"]
+        w = step["weights"]
+        t = step["tickers"]
+
+        # Filter for clarity (show almost everything > 0.1%)
+        mask = w > 0.001
+        f_w = w[mask]
+        f_t = np.array(t)[mask]
+
+        # Sort by weight desc
+        idx = np.argsort(f_w)[::-1]
+        f_w = f_w[idx]
+        f_t = f_t[idx]
+
+        plt.figure(figsize=(10, 6))
+        # Fixed ylim to make comparison easier
+        plt.ylim(0, 100)
+        sns.barplot(x=f_t, y=f_w * 100, hue=f_t, palette="viridis", legend=False)
+        plt.title(f"Portfolio Composition: {d}", fontweight="bold", fontsize=16)
+        plt.ylabel("Weight (%)", fontsize=12)
+        plt.xlabel("")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout()
+
+        frame_path = os.path.join(temp_frames_dir, f"frame_{i:03d}.png")
+        plt.savefig(frame_path, dpi=100)
+        plt.close()
+        frames.append(frame_path)
+
+    gif_path = os.path.join(output_dir, "portfolio_evolution.gif")
+    with imageio.get_writer(gif_path, mode="I", duration=0.5) as writer:
+        for filename in frames:
+            image = imageio.imread(filename)
+            writer.append_data(image)  # type: ignore [attr-defined]
+
+    # Cleanup frames
+    for filename in frames:
+        os.remove(filename)
+    os.rmdir(temp_frames_dir)
+    print(f"Saved GIF to {gif_path}")
+
+
+def plot_rolling_composition_and_correlations(portfolio_history: list[dict], output_dir: str, max_plots: int = 5):
+    """Generates a side-by-side plot of portfolio composition and correlations.
+
+    Args:
+        portfolio_history: List of dicts, each containing:
+                           - 'date' (datetime/date)
+                           - 'weights' (np.array)
+                           - 'tickers' (list[str])
+                           - 'correlations' (pd.DataFrame)
+        output_dir: Directory to save the plot.
+        max_plots: Maximum number of periods to visualize. If len(history) > max_plots,
+                   selects evenly spaced periods.
+    """
+    n_periods = len(portfolio_history)
+    if n_periods == 0:
+        return
+
+    if n_periods <= max_plots:
+        indices = list(range(n_periods))
+    else:
+        indices = np.linspace(0, n_periods - 1, max_plots, dtype=int).tolist()
+
+    n_rows = len(indices)
+    fig, axes = plt.subplots(n_rows, 2, figsize=(20, 5 * n_rows), constrained_layout=True)
+
+    if n_rows == 1:
+        axes = np.array([axes])
+
+    for i, idx in enumerate(indices):
+        data = portfolio_history[idx]
+        date_str = str(data["date"])
+        weights = data["weights"]
+        tickers = np.array(data["tickers"])
+        corr_matrix = data.get("correlations", None)
+
+        ax_comp = axes[i, 0]
+
+        mask = weights > 0.01
+        f_weights = weights[mask]
+        f_tickers = tickers[mask]
+
+        sort_idx = np.argsort(f_weights)[::-1]
+        f_weights = f_weights[sort_idx]
+        f_tickers = f_tickers[sort_idx]
+
+        if len(f_weights) > 0:
+            colors = sns.color_palette("viridis", len(f_weights))
+            ax_comp.bar(f_tickers, f_weights * 100, color=colors)
+            ax_comp.set_title(f"Composition: {date_str}", fontweight="bold")
+            ax_comp.set_ylabel("Weight (%)")
+            ax_comp.tick_params(axis="x", rotation=45)
+            ax_comp.grid(axis="y", alpha=0.3)
+        else:
+            ax_comp.text(0.5, 0.5, "No significant positions", ha="center", va="center")
+
+        ax_corr = axes[i, 1]
+
+        if corr_matrix is not None and not corr_matrix.empty and len(f_tickers) > 1:
+            subset_corr = corr_matrix.loc[f_tickers, f_tickers]
+
+            sns.heatmap(
+                subset_corr,
+                ax=ax_corr,
+                cmap="RdBu_r",
+                vmin=-1,
+                vmax=1,
+                annot=True,
+                fmt=".2f",
+                cbar=True,
+                annot_kws={"size": 8},
+            )
+            ax_corr.set_title(f"Correlations: {date_str} (Active Assets)", fontweight="bold")
+        else:
+            ax_corr.text(0.5, 0.5, "Insufficient assets/data for correlation", ha="center", va="center")
+            ax_corr.set_title(f"Correlations: {date_str}")
+
+    plt.suptitle("Portfolio Evolution: Composition vs Correlations", fontsize=20, fontweight="bold", y=1.02)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        save_path = os.path.join(output_dir, "evolution_composition_correlation.png")
+        plt.savefig(save_path, dpi=100, bbox_inches="tight")
+        print(f"Saved evolution plot to {save_path}")
+
+    plt.close()

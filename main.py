@@ -1,6 +1,7 @@
-"""Orchestrates NSGA-II optimization with periodic plotting."""
+"""Orchestrates NSGA-II portfolio optimization using Walk-Forward Optimization."""
 
 import argparse
+from argparse import Namespace
 import os
 import random
 import yaml
@@ -8,114 +9,16 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from deap import tools
+from tqdm import tqdm  # Import tqdm
 
-from src.data import load_prices, process_returns
+from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
 from src.evolution import setup_deap, run_nsga2
-from src.plots import (
-    plot_pareto_vs_markowitz,
-    plot_portfolio_vs_baseline,
-    plot_final_portfolio,
-    plot_performance_summary,
-)
-from src.utils import optimize_markowitz, maximum_drawdown, sharpe_ratio
+from src.plots import generate_wfo_factsheet, create_portfolio_gif
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
-def load_benchmark(ticker: str, start: str):
-    if not ticker:
-        return None
-    try:
-        benchmark = load_prices([ticker], start=start)
-        if isinstance(benchmark, pd.DataFrame):
-            benchmark = benchmark.iloc[:, 0]
-        # Check if we got meaningful data (more than just a few rows)
-        valid_count = benchmark.notna().sum()
-        if valid_count < 50:
-            print(f"[WARN] Benchmark {ticker} has only {valid_count} valid prices - skipping")
-            return None
-        return benchmark
-    except Exception as exc:
-        print(f"Could not load benchmark {ticker}: {exc}")
-        return None
-
-
-def create_synthetic_index(prices_df, method="equal"):
-    """Create a synthetic index from component stocks.
-
-    Args:
-            prices_df: DataFrame of stock prices (columns are tickers)
-            method: 'equal' for equal-weight, 'price' for price-weighted
-
-    Returns:
-            pd.Series: Synthetic index price series
-    """
-    if method == "equal":  # Equal-weight: average daily return across all stocks, then cumulative
-        returns = prices_df.pct_change().dropna()
-        avg_returns = returns.mean(axis=1)
-        synthetic = 100 * (1 + avg_returns).cumprod()
-
-        first_date = prices_df.index[0]
-        synthetic = pd.concat([pd.Series([100.0], index=[first_date]), synthetic])
-    elif method == "price":  # Price-weighted (like Dow Jones): sum of prices / divisor
-        synthetic = prices_df.sum(axis=1)
-        synthetic = 100 * synthetic / synthetic.iloc[0]
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    synthetic.name = "Synthetic Index"
-    return synthetic
-
-
-def make_callback(
-    prices_df,
-    stock_returns_m,
-    stock_returns_s,
-    p_m,
-    p_s,
-    stock_names,
-    index_prices=None,
-    output_dir=None,
-    show_plots=True,
-    risk_metric="std",
-    markowitz_custom_risk=None,
-    covariances=None,
-):
-    def _callback(gen, pop, logbook):
-        if show_plots:
-            print(f"Generation {gen}: plotting Pareto front and portfolio performance")
-        pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
-
-        plot_pareto_vs_markowitz(
-            pareto_front,
-            stock_returns_m,
-            stock_returns_s,
-            p_m,
-            p_s,
-            output_dir=output_dir,
-            show=show_plots,
-            risk_metric=risk_metric,
-            markowitz_custom_risk=markowitz_custom_risk,
-            covariances=covariances,
-        )
-
-        best = max(pareto_front, key=lambda ind: ind.fitness.values[0])
-        
-        plot_performance_summary(
-            prices_df[stock_names],
-            np.array(best),
-            np.array(stock_names),
-            index_prices=index_prices,
-            title=f"Generation {gen}: Best Portfolio Summary",
-            output_dir=output_dir,
-            show=show_plots,
-            filename=f"summary_gen_{gen:03d}.png",
-        )
-
-    return _callback
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run NSGA-II portfolio optimization with periodic plots")
+def parse_args() -> Namespace:
+    parser = argparse.ArgumentParser(description="Run NSGA-II portfolio optimization with Walk-Forward Validation")
     parser.add_argument(
         "--ticker-set",
         type=str,
@@ -126,19 +29,17 @@ def parse_args():
     parser.add_argument(
         "--start-date",
         type=str,
-        default="2002-01-01",
-        help="Historical start date (YYYY-MM-DD)",
+        default="2015-01-01",
+        help="Data start date (YYYY-MM-DD).",
     )
     parser.add_argument("--benchmark", type=str, default="", help="Optional benchmark ticker")
-    parser.add_argument("--pop-size", type=int, default=200, help="Population size")
-    parser.add_argument("--n-generations", type=int, default=80, help="Number of generations")
-    parser.add_argument("--cxpb", type=float, default=0.7, help="Crossover probability")
-    parser.add_argument("--mutpb", type=float, default=0.6, help="Mutation probability")
-    parser.add_argument("--callback-interval", type=int, default=10, help="Plot every N generations")
+    parser.add_argument("--pop-size", type=int, default=100, help="Population size")
+    parser.add_argument("--n-generations", type=int, default=50, help="Generations per rebalance")
     parser.add_argument(
-        "--no-plots",
-        action="store_true",
-        help="Don't display plots during evolution (still saves them)",
+        "--train-window", type=int, default=1008, help="Training window size in days (e.g. 1008 = 4 years)"
+    )
+    parser.add_argument(
+        "--rebalance-freq", type=int, default=90, help="Rebalancing frequency in days (e.g. 90 = 1 quarter)"
     )
     parser.add_argument(
         "--risk-metric",
@@ -147,166 +48,265 @@ def parse_args():
         choices=["std", "mdd", "sharpe"],
         help="Risk metric: 'std' (volatility), 'mdd' (max drawdown), 'sharpe' (Sharpe ratio)",
     )
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--crossover",
+        type=str,
+        default="arithmetic",
+        choices=["arithmetic", "blend", "dirichlet"],
+        help="Crossover method: 'arithmetic', 'blend', 'dirichlet'",
+    )
+    parser.add_argument(
+        "--mutation",
+        type=str,
+        default="gaussian",
+        choices=["gaussian", "transfer", "combined"],
+        help="Mutation method: 'gaussian', 'transfer', 'combined'",
+    )
+    parser.add_argument(
+        "--selection-method",
+        type=str,
+        default="tournament",
+        choices=["tournament", "nsga2", "best", "worst"],
+        help="Selection method for the genetic algorithm ('tournament', 'nsga2', 'best', 'worst')",
+    )
+    parser.add_argument(
+        "--selection-tournsize",
+        type=int,
+        default=3,
+        help="Tournament size for 'tournament' selection method",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--use-smoothing", action="store_true", help="Apply moving average smoothing to prices")
+    parser.add_argument("--fill-missing", action="store_true", help="Interpolate prices for missing calendar days")
+    parser.add_argument(
+        "--transaction-cost", type=float, default=0.0025, help="Transaction cost per rebalance (e.g. 0.0025 = 0.25%%)"
+    )
+    parser.add_argument(
+        "--min-liquidity", type=float, default=500000.0, help="Minimum daily turnover (Price*Vol) to trade"
+    )
+    parser.add_argument("--quiet", action="store_true", help="Suppress detailed output")
     return parser.parse_args()
 
 
 def main():
-    args = parse_args()
+    args: Namespace = parse_args()
 
-    # Set random seeds
+    def log_msg(msg: str):
+        if not args.quiet:
+            print(msg)
+
     if args.seed is not None:
         random.seed(args.seed)
         np.random.seed(args.seed)
-        print(f"[INFO] Using random seed: {args.seed}")
 
-    # Generate experiment ID
     now = datetime.now()
-    exp_id = f"experiment-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}"
+    exp_id = f"wfo-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}"
     output_dir = os.path.join("plots", exp_id)
     os.makedirs(output_dir, exist_ok=True)
-    print(f"Saving plots to: {output_dir}")
+    log_msg(f"Saving WFO results to: {output_dir}")
 
-    tickers = TICKER_SETS[args.ticker_set]
-    print(f"Using predefined ticker set '{args.ticker_set}': {tickers}")
+    ticker_config = TICKER_SETS[args.ticker_set]
+    tickers = ticker_config["tickers"]
+    default_benchmark = ticker_config["benchmark"]
 
-    start_date = args.start_date
-    benchmark_ticker = args.benchmark
+    log_msg(f"Tickers: {tickers}")
 
-    # Save experiment parameters to YAML
-    config = {
-        "experiment_id": exp_id,
-        "timestamp": now.isoformat(),
-        "parameters": {
-            "tickers": tickers,
-            "ticker_set": args.ticker_set,
-            "start_date": start_date,
-            "benchmark": benchmark_ticker,
-            "pop_size": args.pop_size,
-            "n_generations": args.n_generations,
-            "crossover_prob": args.cxpb,
-            "mutation_prob": args.mutpb,
-            "callback_interval": args.callback_interval,
-            "show_plots": not args.no_plots,
-            "risk_metric": args.risk_metric,
-            "seed": args.seed,
-        },
-    }
-    config_path = os.path.join(output_dir, "config.yaml")
-    with open(config_path, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-    print(f"Saved configuration to: {config_path}")
+    full_prices, full_volumes = load_prices(tickers, start=args.start_date)
 
-    prices = load_prices(tickers, start=start_date)
-    if isinstance(prices, pd.Series):
-        prices = prices.to_frame(name=tickers[0])
+    if isinstance(full_prices, pd.Series):
+        full_prices = full_prices.to_frame(name=tickers[0])
+        full_volumes = full_volumes.to_frame(name=tickers[0])
 
-    stats = process_returns(prices)
-    stock_names = stats["valid_tickers"]
-    prices = prices[stock_names]
-    stock_returns_m = stats["returns_m"].loc[stock_names]
-    stock_returns_s = stats["returns_s"].loc[stock_names]
-    stock_covariances = stats["covariances"].loc[stock_names, stock_names]
-    historical_returns = stats["historical_returns"].loc[:, stock_names].values
-
-    # Optimize Markowitz (returns weights, mean returns, volatilities)
-    p_weights, p_m, p_s = optimize_markowitz(stock_returns_m.values, stock_covariances.values, n_portfolios=500)
-
-    # Calculate custom risk metric for Markowitz portfolios if needed
-    markowitz_custom_risk = None
-    if args.risk_metric != "std":
-        print(f"[INFO] Calculating {args.risk_metric} for Markowitz frontier...")
-        markowitz_custom_risk = []
-        for w in p_weights.T:
-            portfolio_returns = historical_returns @ w
-            if args.risk_metric == "mdd":
-                # MDD is usually negative, we want positive magnitude or consistent sign
-                val = -maximum_drawdown(portfolio_returns)
-            elif args.risk_metric == "sharpe":
-                # Maximize sharpe => Minimize negative sharpe
-                val = -sharpe_ratio(portfolio_returns)
-            else:
-                val = 0.0
-            markowitz_custom_risk.append(val)
-        markowitz_custom_risk = np.array(markowitz_custom_risk)
-
-    print(f"[INFO] Using risk metric: {args.risk_metric}")
-    toolbox = setup_deap(
-        stock_names,
-        stock_returns_m.values,
-        stock_covariances.values,
-        historical_returns=historical_returns,
-        risk_metric=args.risk_metric,
-    )
-
-    benchmark_prices = load_benchmark(benchmark_ticker, start_date)
-
-    # If no valid benchmark, create synthetic index from component stocks
+    benchmark_ticker = args.benchmark if args.benchmark else default_benchmark
+    log_msg(f"[INFO] Using benchmark: {benchmark_ticker}")
+    benchmark_prices = load_benchmark(benchmark_ticker, args.start_date)
     if benchmark_prices is None:
-        print("[INFO] Creating synthetic index from component stocks (equal-weight)")
-        benchmark_prices = create_synthetic_index(prices, method="equal")
-        print(f"[INFO] Synthetic index created with {len(benchmark_prices)} data points")
-    else:
-        valid_count = benchmark_prices.notna().sum()
-        print(f"Loaded benchmark {benchmark_ticker}: {valid_count} valid prices")
+        log_msg("[INFO] Creating synthetic index from component stocks for benchmark.")
+        benchmark_prices = create_synthetic_index(full_prices, method="equal")
 
-    callback = make_callback(
-        prices,
-        stock_returns_m,
-        stock_returns_s,
-        p_m,
-        p_s,
-        stock_names,
-        benchmark_prices,
-        output_dir=output_dir,
-        show_plots=not args.no_plots,
-        risk_metric=args.risk_metric,
-        markowitz_custom_risk=markowitz_custom_risk,
-        covariances=stock_covariances.values,
-    )
+    train_window_days = args.train_window
+    rebalance_freq = args.rebalance_freq
+    total_days = len(full_prices)
 
-    pop_size = args.pop_size
-    n_generations = args.n_generations
-    cxpb = args.cxpb
-    mutpb = args.mutpb
-    callback_interval = args.callback_interval
+    if total_days < train_window_days + rebalance_freq:
+        print(f"[ERROR] Not enough data. Have {total_days} days, need at least {train_window_days + rebalance_freq}.")
+        return
 
-    pop, logbook = run_nsga2(
-        toolbox,
-        pop_size=pop_size,
-        n_generations=n_generations,
-        cxpb=cxpb,
-        mutpb=mutpb,
-        callback=callback,
-        callback_interval=callback_interval,
-    )
+    log_msg("\n[INFO] Starting Walk-Forward Optimization")
+    log_msg(f"       Window Strategy: Train on {train_window_days} days, Test/Hold for {rebalance_freq} days.")
+    log_msg(f"       Risk Metric: {args.risk_metric}")
+    log_msg(f"       Evolution: Crossover={args.crossover}, Mutation={args.mutation}")
+    log_msg(f"       Preprocessing: Smoothing={args.use_smoothing}, Fill Missing={args.fill_missing}")
+    log_msg(f"       Transaction Cost: {args.transaction_cost:.2%} per rebalance")
+    log_msg(f"       Liquidity Filter: Min {args.min_liquidity:,.0f} daily")
+    log_msg("-" * 60)
 
-    pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
-    best = max(pareto_front, key=lambda ind: ind.fitness.values[0])
-    print(f"Final best: return={best.fitness.values[0]:.4f}, risk={best.fitness.values[1]:.4f}")
+    current_idx = train_window_days
+    last_population = None
 
-    plot_pareto_vs_markowitz(
-        pareto_front,
-        stock_returns_m,
-        stock_returns_s,
-        p_m,
-        p_s,
-        output_dir=output_dir,
-        show=not args.no_plots,
-        risk_metric=args.risk_metric,
-        markowitz_custom_risk=markowitz_custom_risk,
-        covariances=stock_covariances.values,
-    )
+    equity_curve_parts = {"Conservative": [], "Balanced": [], "Aggressive": []}
+    portfolio_history = {"Conservative": [], "Balanced": [], "Aggressive": []}
 
-    plot_performance_summary(
-        prices,
-        np.array(best),
-        np.array(stock_names),
-        index_prices=benchmark_prices,
-        title="Final Portfolio Performance",
-        output_dir=output_dir,
-        show=not args.no_plots,
-    )
+    # Calculate total number of steps for the progress bar
+    num_steps = (total_days - train_window_days) // rebalance_freq
+    if (total_days - train_window_days) % rebalance_freq != 0:
+        num_steps += 1  # Account for the last partial step
+
+    wfo_progress_bar = tqdm(total=num_steps, desc="WFO Progress", dynamic_ncols=True, disable=args.quiet)
+
+    step = 0
+    while current_idx < total_days:
+        step += 1
+
+        train_start_idx = max(0, current_idx - train_window_days)
+        train_prices = full_prices.iloc[train_start_idx:current_idx]
+        train_volumes = full_volumes.iloc[train_start_idx:current_idx]
+
+        test_end_idx = min(current_idx + rebalance_freq, total_days)
+        test_prices = full_prices.iloc[current_idx:test_end_idx]
+
+        if test_prices.empty:
+            break
+
+        period_start = train_prices.index[-1].date()
+        period_end = test_prices.index[-1].date()
+
+        # Update progress bar description
+        wfo_progress_bar.set_description(
+            f"WFO Progress (Step {step}: Train {train_prices.index[0].date()}->{period_start} | Test {test_prices.index[0].date()}->{period_end})"
+        )
+
+        try:
+            stats = process_returns(
+                train_prices,
+                apply_smoothing=args.use_smoothing,
+                fill_missing=args.fill_missing,
+                volume_df=train_volumes,
+                min_liquidity=args.min_liquidity,
+            )
+        except (ValueError, TypeError) as e:
+            print(f"[WARN] Not enough valid data in this window. Skipping. Error: {e}")
+            current_idx += rebalance_freq
+            wfo_progress_bar.update(1)
+            continue
+
+        valid_tickers = stats["valid_tickers"]
+        period_test_prices = test_prices[valid_tickers]
+
+        stock_returns_m = stats["returns_m"].loc[valid_tickers]
+        stock_covariances = stats["covariances"].loc[valid_tickers, valid_tickers]
+        historical_returns = stats["historical_returns"].loc[:, valid_tickers].values
+
+        if len(valid_tickers) < 2:
+            log_msg(f"[WARN] Not enough valid tickers in window {step}. Skipping.")
+            current_idx += rebalance_freq
+            wfo_progress_bar.update(1)
+            continue
+
+        toolbox = setup_deap(
+            valid_tickers,
+            stock_returns_m.values,
+            stock_covariances.values,
+            historical_returns=historical_returns,
+            risk_metric=args.risk_metric,
+            crossover_method=args.crossover,
+            mutation_method=args.mutation,
+            selection_method=args.selection_method,
+            selection_kwargs={"tournsize": args.selection_tournsize} if args.selection_method == "tournament" else None,
+        )
+
+        pop, _ = run_nsga2(
+            toolbox,
+            pop_size=args.pop_size,
+            n_generations=args.n_generations,
+            seed_population=last_population,
+            callback=None,
+            verbose=False,  # Set verbose to False to suppress nested tqdm
+        )
+        last_population = pop
+
+        pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
+
+        ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
+
+        ind_aggressive = max(pareto_front, key=lambda ind: ind.fitness.values[0])
+
+        if args.risk_metric == "sharpe":
+            sorted_front = sorted(pareto_front, key=lambda ind: ind.fitness.values[0])
+            ind_balanced = sorted_front[len(sorted_front) // 2]
+            ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
+        else:
+            ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
+            ind_balanced = max(pareto_front, key=lambda ind: ind.fitness.values[0] / (ind.fitness.values[1] + 1e-9))
+
+        selected_inds = {"Conservative": ind_conservative, "Balanced": ind_balanced, "Aggressive": ind_aggressive}
+
+        period_test_returns = period_test_prices.pct_change().fillna(0)
+
+        for profile_name, ind in selected_inds.items():
+            weights = np.array(ind)
+            port_test_ret = period_test_returns.dot(weights)
+            segment_equity = (1 + port_test_ret).cumprod()
+
+            equity_curve_parts[profile_name].append(segment_equity)
+            portfolio_history[profile_name].append({"date": period_start, "weights": weights, "tickers": valid_tickers})
+
+        current_idx += rebalance_freq
+        wfo_progress_bar.update(1)  # Update the progress bar
+
+    wfo_progress_bar.close()  # Close the progress bar after the loop
+    log_msg("\n[INFO] Optimization finished. Stitching performance...")
+
+    if not equity_curve_parts["Balanced"]:
+        print("No results generated.")
+        return
+
+    for profile_name in ["Conservative", "Balanced", "Aggressive"]:
+        log_msg(f"\nProcessing results for: {profile_name}")
+        parts = equity_curve_parts[profile_name]
+
+        full_equity = pd.Series(dtype=float)
+        cumulative_factor = 1.0
+
+        for i, segment in enumerate(parts):
+            if i > 0:
+                cumulative_factor *= 1 - args.transaction_cost
+
+            scaled_segment = segment * cumulative_factor
+            if full_equity.empty:
+                full_equity = scaled_segment
+            else:
+                full_equity = pd.concat([full_equity, scaled_segment])
+            cumulative_factor = scaled_segment.iloc[-1]
+
+        start_date_test = full_equity.index[0]
+        end_date_test = full_equity.index[-1]
+        bench_test = benchmark_prices.loc[start_date_test:end_date_test]
+        if not bench_test.empty:
+            bench_test = bench_test / bench_test.iloc[0] * full_equity.iloc[0]
+
+        profile_dir = os.path.join(output_dir, profile_name.lower())
+        os.makedirs(profile_dir, exist_ok=True)
+
+        generate_wfo_factsheet(
+            full_equity,
+            bench_test,
+            args.risk_metric,
+            args.train_window,
+            args.rebalance_freq,
+            portfolio_history[profile_name],
+            ticker_set_name=f"{args.ticker_set} ({profile_name})",
+            benchmark_name=benchmark_ticker,
+            output_dir=profile_dir,
+            show=False,
+        )
+
+        create_portfolio_gif(portfolio_history[profile_name], profile_dir)
+
+    with open(os.path.join(output_dir, "config.yaml"), "w") as f:
+        yaml.dump(vars(args), f)
+
+    print(f"Done! All results saved to {output_dir}")
 
 
 if __name__ == "__main__":
