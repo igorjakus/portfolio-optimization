@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from src.utils import maximum_drawdown, normalize_weights, sharpe_ratio
 from src.mutations import gaussian_mutation, swap_mutation, transfer_mutation
 from src.crossovers import arithmetic_crossover, blend_crossover, dirichlet_blend_crossover
+from loguru import logger
 
 
 class FitnessMulti(base.Fitness):
@@ -274,10 +275,10 @@ def run_nsga2(
                 if hasattr(ind.fitness, "values"):
                     del ind.fitness.values
             if verbose:
-                print(f"[INFO] Warm Start: Reusing {len(valid_seed)} individuals from previous period.")
+                logger.info(f"[INFO] Warm Start: Reusing {len(valid_seed)} individuals from previous period.")
         else:
             if len(seed_population) > 0 and verbose:
-                print(
+                logger.warning(
                     f"[WARN] Seed population dimension mismatch (Expected {expected_size}, got {len(seed_population[0])}). Starting fresh."
                 )
 
@@ -326,6 +327,6 @@ def run_nsga2(
             try:
                 callback(gen, pop, logbook)
             except Exception as exc:
-                print(f"Callback failed at gen {gen}: {exc}")
+                logger.warning(f"Callback failed at gen {gen}: {exc}")
 
     return pop, logbook

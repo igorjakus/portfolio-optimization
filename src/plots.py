@@ -5,6 +5,7 @@ import pandas as pd
 import imageio.v2 as imageio
 from IPython.display import clear_output
 import os
+from loguru import logger
 
 import deap.tools as tools
 from src.utils import (
@@ -478,7 +479,7 @@ def plot_pareto_vs_markowitz(
 
     else:
         if covariances is None:
-            print("[WARN] Covariances not provided, cannot plot Pareto on Std Dev axis correctly.")
+            logger.warning("[WARN] Covariances not provided, cannot plot Pareto on Std Dev axis correctly.")
             pareto_std_devs = pareto_fitness_risks_sorted
         else:
             pareto_std_devs = []
@@ -829,32 +830,32 @@ def generate_wfo_factsheet(
         benchmark_equity, bm_returns, aligned_returns_with_benchmark=aligned_returns, is_benchmark=True
     )
 
-    print("\n" + "=" * 50)
-    print(f" WFO RESULTS SUMMARY ({risk_metric.upper()})")
-    print(f" Tickers: {ticker_set_name} | Benchmark: {benchmark_name}")
-    print("=" * 50)
-    print(f"{'Metric':<30} | {'Portfolio':<15} | {'Benchmark':<15}")
-    print("-" * 50)
-    print(
+    logger.info("\n" + "=" * 50)
+    logger.info(f" WFO RESULTS SUMMARY ({risk_metric.upper()})")
+    logger.info(f" Tickers: {ticker_set_name} | Benchmark: {benchmark_name}")
+    logger.info("=" * 50)
+    logger.info(f"{'Metric':<30} | {'Portfolio':<15} | {'Benchmark':<15}")
+    logger.info("-" * 50)
+    logger.info(
         f"{'Total Return':<30} | {port_metrics['total_ret'] * 100:14.2f}% | {bench_metrics['total_ret'] * 100:14.2f}%"
     )
-    print(
+    logger.info(
         f"{'Compound Annual Growth Rate':<30} | {port_metrics['cagr'] * 100:14.2f}% | {bench_metrics['cagr'] * 100:14.2f}%"
     )
-    print(f"{'Annualized Volatility':<30} | {port_metrics['std'] * 100:14.2f}% | {bench_metrics['std'] * 100:14.2f}%")
-    print(f"{'Max Drawdown':<30} | {port_metrics['mdd'] * 100:14.2f}% | {bench_metrics['mdd'] * 100:14.2f}%")
-    print(
+    logger.info(f"{'Annualized Volatility':<30} | {port_metrics['std'] * 100:14.2f}% | {bench_metrics['std'] * 100:14.2f}%")
+    logger.info(f"{'Max Drawdown':<30} | {port_metrics['mdd'] * 100:14.2f}% | {bench_metrics['mdd'] * 100:14.2f}%")
+    logger.info(
         f"{'Best 365 Days':<30} | {port_metrics['best_year'] * 100:14.2f}% | {bench_metrics['best_year'] * 100:14.2f}%"
     )
-    print(
+    logger.info(
         f"{'Worst 365 Days':<30} | {port_metrics['worst_year'] * 100:14.2f}% | {bench_metrics['worst_year'] * 100:14.2f}%"
     )
-    print(f"{'Sharpe Ratio':<30} | {port_metrics['sharpe']:14.2f} | {bench_metrics['sharpe']:14.2f}")
-    print(f"{'Sortino Ratio':<30} | {port_metrics['sortino']:14.2f} | {bench_metrics['sortino']:14.2f}")
-    print(f"{'Semivariance':<30} | {port_metrics['semi_var']:14.2f} | {bench_metrics['semi_var']:14.2f}")
-    print(f"{'Correlation':<30} | {port_metrics['corr']:14.2f} | {'N/A':>15}")
-    print(f"{'Avg Turnover per Rebalance':<30} | {port_metrics['turnover'] * 100:14.2f}% | {'N/A':>15}")
-    print("=" * 50 + "\n")
+    logger.info(f"{'Sharpe Ratio':<30} | {port_metrics['sharpe']:14.2f} | {bench_metrics['sharpe']:14.2f}")
+    logger.info(f"{'Sortino Ratio':<30} | {port_metrics['sortino']:14.2f} | {bench_metrics['sortino']:14.2f}")
+    logger.info(f"{'Semivariance':<30} | {port_metrics['semi_var']:14.2f} | {bench_metrics['semi_var']:14.2f}")
+    logger.info(f"{'Correlation':<30} | {port_metrics['corr']:14.2f} | {'N/A':>15}")
+    logger.info(f"{'Avg Turnover per Rebalance':<30} | {port_metrics['turnover'] * 100:14.2f}% | {'N/A':>15}")
+    logger.info("=" * 50 + "\n")
 
     fig = plt.figure(figsize=(16, 14))
     gs = fig.add_gridspec(3, 1, height_ratios=[3, 1, 1.2], hspace=0.3)
@@ -940,7 +941,7 @@ def generate_wfo_factsheet(
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
         plt.savefig(os.path.join(output_dir, "wfo_factsheet.png"), dpi=200)
-        print(f"Saved WFO factsheet to {output_dir}/wfo_factsheet.png")
+        logger.info(f"Saved WFO factsheet to {output_dir}/wfo_factsheet.png")
 
     if show:
         plt.show()
@@ -955,7 +956,7 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
         portfolio_history: List of dicts with keys 'date', 'weights', 'tickers'.
         output_dir: Directory to save the GIF.
     """
-    print("[INFO] Generating portfolio evolution GIF...")
+    logger.info("[INFO] Generating portfolio evolution GIF...")
     frames = []
     temp_frames_dir = os.path.join(output_dir, "temp_frames")
     os.makedirs(temp_frames_dir, exist_ok=True)
@@ -996,7 +997,7 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
     for filename in frames:
         os.remove(filename)
     os.rmdir(temp_frames_dir)
-    print(f"Saved GIF to {gif_path}")
+    logger.info(f"Saved GIF to {gif_path}")
 
 
 def plot_rolling_composition_and_correlations(portfolio_history: list[dict], output_dir: str, max_plots: int = 5):
@@ -1081,6 +1082,6 @@ def plot_rolling_composition_and_correlations(portfolio_history: list[dict], out
         os.makedirs(output_dir, exist_ok=True)
         save_path = os.path.join(output_dir, "evolution_composition_correlation.png")
         plt.savefig(save_path, dpi=100, bbox_inches="tight")
-        print(f"Saved evolution plot to {save_path}")
+        logger.info(f"Saved evolution plot to {save_path}")
 
     plt.close()

@@ -1,5 +1,6 @@
 import pandas as pd
 import yfinance as yf
+from loguru import logger
 
 
 def load_prices(tickers, start="2020-01-01") -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -155,16 +156,16 @@ def load_benchmark(ticker: str, start: str) -> pd.Series | None:
         if isinstance(benchmark_data, pd.DataFrame) and not benchmark_data.empty:
             benchmark = benchmark_data.iloc[:, 0]
         else:
-            print(f"[WARN] No valid price data fetched for benchmark {ticker}.")
+            logger.warning(f"[WARN] No valid price data fetched for benchmark {ticker}.")
             return None
 
         valid_count = benchmark.notna().sum()
         if valid_count < 50:
-            print(f"[WARN] Benchmark {ticker} has only {valid_count} valid prices - skipping")
+            logger.warning(f"[WARN] Benchmark {ticker} has only {valid_count} valid prices - skipping")
             return None
         return benchmark
     except Exception as exc:
-        print(f"Could not load benchmark {ticker}: {exc}")
+        logger.warning(f"Could not load benchmark {ticker}: {exc}")
         return None
 
 

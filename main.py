@@ -1,7 +1,6 @@
 """Orchestrates NSGA-II portfolio optimization using Walk-Forward Optimization."""
 
 import argparse
-from argparse import Namespace
 import os
 import random
 import yaml
@@ -10,6 +9,7 @@ import pandas as pd
 from datetime import datetime
 from deap import tools
 from tqdm import tqdm
+from loguru import logger
 
 from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
 from src.evolution import setup_deap, run_nsga2
@@ -17,7 +17,7 @@ from src.plots import generate_wfo_factsheet, create_portfolio_gif
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
-def parse_args() -> Namespace:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run NSGA-II portfolio optimization with Walk-Forward Validation")
     parser.add_argument(
         "--ticker-set",
@@ -94,11 +94,11 @@ def parse_args() -> Namespace:
 
 
 def main():
-    args: Namespace = parse_args()
+    args: argparse.Namespace = parse_args()
 
     def log_msg(msg: str):
         if not args.quiet:
-            print(msg)
+            logger.info(msg)
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -134,7 +134,7 @@ def main():
     total_days = len(full_prices)
 
     if total_days < train_window_days + rebalance_freq:
-        print(f"[ERROR] Not enough data. Have {total_days} days, need at least {train_window_days + rebalance_freq}.")
+        logger.error(f"[ERROR] Not enough data. Have {total_days} days, need at least {train_window_days + rebalance_freq}.")
         return
 
     log_msg("\n[INFO] Starting Walk-Forward Optimization")
@@ -189,7 +189,7 @@ def main():
                 min_liquidity=args.min_liquidity,
             )
         except (ValueError, TypeError) as e:
-            print(f"[WARN] Not enough valid data in this window. Skipping. Error: {e}")
+            logger.warning(f"[WARN] Not enough valid data in this window. Skipping. Error: {e}")
             current_idx += rebalance_freq
             wfo_progress_bar.update(1)
             continue
@@ -258,7 +258,7 @@ def main():
     log_msg("\n[INFO] Optimization finished. Stitching performance...")
 
     if not equity_curve_parts["Balanced"]:
-        print("No results generated.")
+        logger.error("No results generated.")
         return
 
     for profile_name in ["Conservative", "Balanced", "Aggressive"]:
@@ -306,7 +306,7 @@ def main():
     with open(os.path.join(output_dir, "config.yaml"), "w") as f:
         yaml.dump(vars(args), f)
 
-    print(f"Done! All results saved to {output_dir}")
+    logger.info(f"Done! All results saved to {output_dir}")
 
 
 if __name__ == "__main__":
