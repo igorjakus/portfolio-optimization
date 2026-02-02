@@ -5,6 +5,10 @@ import yfinance as yf
 def load_prices(tickers, start="2020-01-01") -> tuple[pd.DataFrame, pd.DataFrame]:
     """Fetches stock data (Prices and Volume).
 
+    Args:
+        tickers: List of ticker symbols.
+        start: Start date string (YYYY-MM-DD).
+
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: (Adj Close Prices, Volume)
     """
@@ -20,14 +24,6 @@ def load_prices(tickers, start="2020-01-01") -> tuple[pd.DataFrame, pd.DataFrame
     )
 
     return prices, volume
-
-
-def load_raw_data(tickers, start="2020-01-01") -> pd.DataFrame:
-    """Fetches full ticker data from Yahoo Finance."""
-    data = yf.download(tickers, start=start, progress=False, auto_adjust=True)
-    if data is None or data.empty:
-        raise ValueError("No data fetched. Please check the tickers and date range.")
-    return data
 
 
 def fill_missing_dates(prices: pd.DataFrame, method: str = "linear", fill_weekends: bool = True) -> pd.DataFrame:
@@ -78,7 +74,7 @@ def process_returns(
     apply_smoothing: bool = False,
     smoothing_window: int = 5,
     fill_missing: bool = False,
-    fill_weekends: bool = True, # New parameter
+    fill_weekends: bool = True,
     volume_df: pd.DataFrame | None = None,
     min_liquidity: float = 0.0,
 ) -> dict:
@@ -101,28 +97,23 @@ def process_returns(
         if volume_df is not None:
             volume_df = fill_missing_dates(
                 volume_df, method="ffill", fill_weekends=fill_weekends
-            )  # Volume shouldn't be linearly interpolated typically
+            )
 
     if apply_smoothing:
         prices_df = smooth_prices(prices_df, window=smoothing_window)
 
-    # 1. Filter by Liquidity first (if applicable)
     if volume_df is not None and min_liquidity > 0:
-        # Align dates
         common_idx = prices_df.index.intersection(volume_df.index)
-        # Look at the analysis period only
         period_start = common_idx[-delta_t - 1] if len(common_idx) > delta_t else common_idx[0]
 
         p_slice = prices_df.loc[period_start:]
         v_slice = volume_df.loc[period_start:]
 
-        # Daily Turnover = Price * Volume
         daily_turnover = p_slice * v_slice
         avg_turnover = daily_turnover.mean()
 
         valid_liquidity_cols = avg_turnover[avg_turnover >= min_liquidity].index
 
-        # Filter prices
         prices_df = prices_df[valid_liquidity_cols]
 
     stock_returns = prices_df.pct_change(fill_method=None)
@@ -160,16 +151,13 @@ def load_benchmark(ticker: str, start: str) -> pd.Series | None:
     if not ticker:
         return None
     try:
-        benchmark_data, _ = load_prices([ticker], start=start)  # load_prices returns (prices, volume)
-
-        # Check if benchmark_data is a DataFrame and extract the series
+        benchmark_data, _ = load_prices([ticker], start=start)
         if isinstance(benchmark_data, pd.DataFrame) and not benchmark_data.empty:
             benchmark = benchmark_data.iloc[:, 0]
         else:
             print(f"[WARN] No valid price data fetched for benchmark {ticker}.")
             return None
 
-        # Check validity
         valid_count = benchmark.notna().sum()
         if valid_count < 50:
             print(f"[WARN] Benchmark {ticker} has only {valid_count} valid prices - skipping")
@@ -194,13 +182,8 @@ def create_synthetic_index(prices_df: pd.DataFrame, method: str = "equal") -> pd
         return pd.Series(dtype=float)
 
     if method == "equal":
-        # Calculate daily returns for all stocks
         returns = prices_df.pct_change(fill_method=None)
-
-        # Average return across all available stocks for each day (skipna=True handles sparse data)
         avg_returns = returns.mean(axis=1, skipna=True).fillna(0)
-
-        # Calculate cumulative growth
         synthetic = 100 * (1 + avg_returns).cumprod()
 
     elif method == "price":

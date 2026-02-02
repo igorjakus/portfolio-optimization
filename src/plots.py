@@ -17,7 +17,7 @@ from src.utils import (
     semivariance,
     calculate_rolling_annual_returns,
     max_drawdown_duration,
-)  # New imports
+)
 
 
 def plot_close_price(stock_name, prices):
@@ -409,7 +409,6 @@ def plot_pareto_vs_markowitz(
 
     pareto_front = tools.sortNondominated(final_pop, len(final_pop), first_front_only=True)[0]
     pareto_returns = np.array([ind.fitness.values[0] for ind in pareto_front])
-    # Risk from fitness (could be std, mdd, or negative sharpe)
     pareto_fitness_risks = np.array([ind.fitness.values[1] for ind in pareto_front])
 
     sort_idx = np.argsort(pareto_returns)
@@ -602,7 +601,6 @@ def plot_pareto_portfolio_composition(portfolio_idx, pareto_front, stock_names, 
     ax1.grid(axis="y", alpha=0.3)
     plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
-    # Risk-Return profile
     pareto_returns = [ind.fitness.values[0] for ind in pareto_front]
     pareto_risks = [ind.fitness.values[1] for ind in pareto_front]
     ax2.scatter(
@@ -686,10 +684,8 @@ def plot_portfolio_vs_baseline(
     for col in curves.columns:
         plt.plot(curves.index, curves[col], linewidth=2, label=col)
 
-    # Add Train/Test Split Line
     if test_start_date is not None and test_start_date in curves.index:
         plt.axvline(test_start_date, color="red", linestyle="--", linewidth=1.5, label="Start of Test Period")
-        # Shade the test area
         plt.axvspan(test_start_date, curves.index[-1], color="red", alpha=0.05)
         plt.text(
             test_start_date,
@@ -744,7 +740,6 @@ def _calculate_portfolio_metrics(
     metrics = {}
 
     if equity_series.empty or returns_series.empty:
-        # Assign default 0.0 or appropriate value for all metrics
         return {
             "total_ret": 0.0,
             "cagr": 0.0,
@@ -778,14 +773,14 @@ def _calculate_portfolio_metrics(
     if not is_benchmark and portfolio_history is not None:
         metrics["turnover"] = calculate_turnover(portfolio_history)
     else:
-        metrics["turnover"] = 0.0  # Benchmark doesn't have turnover
+        metrics["turnover"] = 0.0
 
     if not is_benchmark and aligned_returns_with_benchmark is not None and not aligned_returns_with_benchmark.empty:
         metrics["corr"] = correlation_with_benchmark(
             aligned_returns_with_benchmark["portfolio"], aligned_returns_with_benchmark["benchmark"]
         )
     else:
-        metrics["corr"] = 0.0  # Benchmark correlation to itself is 1, but we represent it as N/A
+        metrics["corr"] = 0.0
 
     return metrics
 
@@ -796,7 +791,7 @@ def generate_wfo_factsheet(
     risk_metric: str,
     train_window: int,
     rebalance_freq: int,
-    portfolio_history: list[dict],  # Required for turnover
+    portfolio_history: list[dict],
     ticker_set_name: str,
     benchmark_name: str,
     output_dir: str | None = None,
@@ -825,18 +820,14 @@ def generate_wfo_factsheet(
     pf_returns = portfolio_equity.pct_change().dropna()
     bm_returns = benchmark_equity.pct_change().dropna()
 
-    # Align returns for correlation calculation
     aligned_returns = pd.DataFrame({"portfolio": pf_returns, "benchmark": bm_returns}).dropna()
 
-    # Calculate metrics using the helper function
     port_metrics = _calculate_portfolio_metrics(
         portfolio_equity, pf_returns, portfolio_history, aligned_returns, is_benchmark=False
     )
     bench_metrics = _calculate_portfolio_metrics(
         benchmark_equity, bm_returns, aligned_returns_with_benchmark=aligned_returns, is_benchmark=True
     )
-
-    port_metrics["corr"]  # Special case: correlation is against benchmark, so calculated once.
 
     print("\n" + "=" * 50)
     print(f" WFO RESULTS SUMMARY ({risk_metric.upper()})")
@@ -974,18 +965,15 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
         w = step["weights"]
         t = step["tickers"]
 
-        # Filter for clarity (show almost everything > 0.1%)
         mask = w > 0.001
         f_w = w[mask]
         f_t = np.array(t)[mask]
 
-        # Sort by weight desc
         idx = np.argsort(f_w)[::-1]
         f_w = f_w[idx]
         f_t = f_t[idx]
 
         plt.figure(figsize=(10, 6))
-        # Fixed ylim to make comparison easier
         plt.ylim(0, 100)
         sns.barplot(x=f_t, y=f_w * 100, hue=f_t, palette="viridis", legend=False)
         plt.title(f"Portfolio Composition: {d}", fontweight="bold", fontsize=16)
@@ -1003,9 +991,8 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
     with imageio.get_writer(gif_path, mode="I", duration=0.5) as writer:
         for filename in frames:
             image = imageio.imread(filename)
-            writer.append_data(image)  # type: ignore [attr-defined]
+            writer.append_data(image)
 
-    # Cleanup frames
     for filename in frames:
         os.remove(filename)
     os.rmdir(temp_frames_dir)

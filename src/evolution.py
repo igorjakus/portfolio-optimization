@@ -48,14 +48,12 @@ def evaluate_portfolio(
         portfolio_variance = portfolio @ covariances @ portfolio
         risk_value = np.sqrt(max(0, portfolio_variance))
     elif metric == "mdd":
-        # Calculate portfolio returns over time and MDD
         portfolio_returns = hist_returns @ portfolio
-        risk_value = -maximum_drawdown(portfolio_returns)  # MDD is negative, we want positive
+        risk_value = -maximum_drawdown(portfolio_returns)
     elif metric == "sharpe":
-        # For sharpe, we want to maximize it, so we negate it (since fitness minimizes 2nd objective)
         portfolio_returns = hist_returns @ portfolio
         sr = sharpe_ratio(portfolio_returns)
-        risk_value = -sr  # Negate so minimizing this = maximizing sharpe
+        risk_value = -sr
     else:
         raise ValueError(f"Unknown risk metric: {metric}")
 
@@ -91,7 +89,6 @@ def mutate_wrapper(
     elif method == "transfer":
         mutated = transfer_mutation(mutated, mutation_rate=gaussian_rate, flow_amount=transfer_amount)
     elif method == "combined":
-        # Apply transfer mutation first, then gaussian noise for small adjustments
         if np.random.random() < 0.5:
             mutated = transfer_mutation(mutated, mutation_rate=gaussian_rate, flow_amount=transfer_amount)
         else:
@@ -129,7 +126,6 @@ def crossover_wrapper(
     elif method == "blend":
         offspring1, offspring2 = blend_crossover(p1, p2, alpha=alpha)
     elif method == "dirichlet":
-        # concentration_power hardcoded or derived from alpha for simplicity
         offspring1, offspring2 = dirichlet_blend_crossover(p1, p2, alpha=alpha, concentration_power=1.0)
     else:
         raise ValueError(f"Unknown crossover method: {method}")
@@ -184,7 +180,6 @@ def setup_deap(
     if risk_metric in ("mdd", "sharpe") and historical_returns is None:
         raise ValueError(f"historical_returns required for risk_metric='{risk_metric}'")
 
-    # Define fitness: maximize return, minimize risk (or maximize sharpe)
     if not hasattr(creator, "FitnessMulti"):
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
     if not hasattr(creator, "Individual"):
@@ -216,10 +211,9 @@ def setup_deap(
     cx_kwargs["method"] = crossover_method
     toolbox.register("mate", crossover_wrapper, **cx_kwargs)
 
-    # --- Selection Method Configuration ---
     SELECTION_METHODS: dict[str, Callable] = {
         "tournament": tools.selTournament,
-        "nsga2": tools.selNSGA2,  # Used here for parent selection, though more commonly for environmental selection.
+        "nsga2": tools.selNSGA2,
         "best": tools.selBest,
         "worst": tools.selWorst,
     }
@@ -232,7 +226,6 @@ def setup_deap(
     selection_func = SELECTION_METHODS[selection_method]
     sel_kwargs = selection_kwargs or {}
 
-    # Set default tournsize for tournament selection if not provided
     if selection_method == "tournament":
         sel_kwargs.setdefault("tournsize", 3)
 
@@ -268,13 +261,9 @@ def run_nsga2(
     Returns:
         tuple[list[Any], tools.Logbook]: The final population and the logbook with statistics.
     """
-
-    # Initialize population
     if seed_population is None:
         pop = toolbox.population(n=pop_size)
     else:
-        # Check compatibility of seed population
-        # We create a dummy individual to check expected size (number of assets)
         dummy = toolbox.individual()
         expected_size = len(dummy)
 
@@ -292,22 +281,18 @@ def run_nsga2(
                     f"[WARN] Seed population dimension mismatch (Expected {expected_size}, got {len(seed_population[0])}). Starting fresh."
                 )
 
-        # Fill the rest with random individuals if needed
         n_needed = pop_size - len(valid_seed)
         if n_needed > 0:
             new_inds = toolbox.population(n=n_needed)
             pop = valid_seed + new_inds
         else:
-            # If seed is larger than pop_size, just take the first pop_size (or random sample)
             pop = valid_seed[:pop_size]
 
-    # Initial evaluation
     invalid_ind = [ind for ind in pop if not ind.fitness.valid]
     fitnesses = map(toolbox.evaluate, invalid_ind)
     for ind, fit in zip(invalid_ind, fitnesses):
         ind.fitness.values = fit
 
-    # Ensure crowding values are set before the evolutionary loop
     pop = tools.selNSGA2(pop, len(pop))
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)

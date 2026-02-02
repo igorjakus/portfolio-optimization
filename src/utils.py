@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 
 
-def normalize_weights(weights: NDArray) -> NDArray:
+def normalize_weights(weights: np.ndarray) -> np.ndarray:
     """Normalizes portfolio weights to sum to 1.
 
     Args:
@@ -109,19 +108,17 @@ def optimize_markowitz(
             - volatilities: Array of volatilities (std dev) for the portfolios.
     """
     d = returns_m.size
-    Sinv = np.linalg.inv(covariances)
+    s_inv = np.linalg.inv(covariances)
     ones = np.ones(d)
 
-    A = returns_m.T.dot(Sinv.dot(ones))
-    B = returns_m.T.dot(Sinv.dot(returns_m))
-    C = ones.T.dot(Sinv.dot(ones))
+    A = returns_m.T.dot(s_inv.dot(ones))
+    B = returns_m.T.dot(s_inv.dot(returns_m))
+    C = ones.T.dot(s_inv.dot(ones))
     D = B * C - A**2
 
-    p1 = 1 / D * (B * Sinv.dot(ones) - A * Sinv.dot(returns_m))
-    p2 = 1 / D * (C * Sinv.dot(returns_m) - A * Sinv.dot(ones))
+    p1 = 1 / D * (B * s_inv.dot(ones) - A * s_inv.dot(returns_m))
+    p2 = 1 / D * (C * s_inv.dot(returns_m) - A * s_inv.dot(ones))
 
-    # Generate portfolios along the frontier
-    # 0.0001 is a step for the expected return multiplier
     portfolios = np.array([p1 + 0.0001 * i * p2 for i in range(n_portfolios)]).T
 
     p_m = portfolios.T.dot(returns_m)
@@ -267,16 +264,10 @@ def calculate_turnover(portfolio_history: list[dict], total_portfolio_value: flo
         }
         curr_weights_dict = {t: w for t, w in zip(portfolio_history[i]["tickers"], portfolio_history[i]["weights"])}
 
-        # Get all unique tickers from both periods
         all_tickers = sorted(list(set(prev_weights_dict.keys()) | set(curr_weights_dict.keys())))
-
         prev_weights_aligned = np.array([prev_weights_dict.get(t, 0.0) for t in all_tickers])
         curr_weights_aligned = np.array([curr_weights_dict.get(t, 0.0) for t in all_tickers])
 
-        # Turnover = sum of absolute changes in weights / 2 (because each buy/sell counts once)
-        # Or more simply, the sum of buys or sum of sells (which should be equal)
-        # Total change = sum(abs(curr_w - prev_w))
-        # Turnover = 0.5 * sum(abs(curr_w - prev_w))
         turnover = 0.5 * np.sum(np.abs(curr_weights_aligned - prev_weights_aligned))
         turnovers.append(turnover)
 
@@ -296,7 +287,6 @@ def calculate_rolling_annual_returns(equity_curve: pd.Series, periods_per_year: 
     if len(equity_curve) < periods_per_year:
         return 0.0, 0.0
 
-    # Calculate rolling 1-year return: (Price_t / Price_{t-252}) - 1
     rolling_returns = equity_curve.pct_change(periods=periods_per_year).dropna()
 
     if rolling_returns.empty:
@@ -317,29 +307,17 @@ def max_drawdown_duration(equity_curve: pd.Series) -> int:
     if equity_curve.empty:
         return 0
 
-    # Create a series of the running maximum
     high_water_mark = equity_curve.cummax()
-
-    # Identify drawdown periods (where price < HWM)
-    # We want to count consecutive days where equity < HWM
     is_drawdown = equity_curve < high_water_mark
 
     if not is_drawdown.any():
         return 0
 
-    # Group consecutive True values
-    # We compare the boolean series with its shifted version to find state changes
-    # cumsum() gives a unique ID to each group of consecutive values
     groups = (is_drawdown != is_drawdown.shift()).cumsum()
-
-    # Filter only groups that ARE drawdowns
     drawdown_groups = groups[is_drawdown]
 
     if drawdown_groups.empty:
         return 0
 
-    # Count size of each group
-    # Note: This counts trading days (rows), not calendar days
     durations = drawdown_groups.value_counts()
-
     return durations.max()

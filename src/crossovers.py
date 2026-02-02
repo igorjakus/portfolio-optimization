@@ -64,7 +64,7 @@ def dirichlet_blend_crossover(
     alpha: float = 0.5,
     concentration_power: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    r"""Performs a Dirichlet-based blend crossover.
+    """Performs a Dirichlet-based blend crossover.
 
     This method combines BLX-alpha exploration with the Dirichlet distribution's
     natural ability to satisfy the sum-to-one constraint.
@@ -81,7 +81,7 @@ def dirichlet_blend_crossover(
 
     Note:
         Let $L$ be the lower bound vector and each component must receive at least $L_i$.
-        Therefore $R = 1 - \sum L_i$ is the remaining budget to be allocated.
+        Therefore, $R = 1 - \sum L_i$ is the remaining budget to be allocated.
 
         Let $X$ be a sample from the Dirichlet distribution ($\sum X_i = 1$ by definition).
 

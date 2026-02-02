@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from deap import tools
-from tqdm import tqdm  # Import tqdm
+from tqdm import tqdm
 
 from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
 from src.evolution import setup_deap, run_nsga2
@@ -152,10 +152,9 @@ def main():
     equity_curve_parts = {"Conservative": [], "Balanced": [], "Aggressive": []}
     portfolio_history = {"Conservative": [], "Balanced": [], "Aggressive": []}
 
-    # Calculate total number of steps for the progress bar
     num_steps = (total_days - train_window_days) // rebalance_freq
     if (total_days - train_window_days) % rebalance_freq != 0:
-        num_steps += 1  # Account for the last partial step
+        num_steps += 1
 
     wfo_progress_bar = tqdm(total=num_steps, desc="WFO Progress", dynamic_ncols=True, disable=args.quiet)
 
@@ -176,7 +175,6 @@ def main():
         period_start = train_prices.index[-1].date()
         period_end = test_prices.index[-1].date()
 
-        # Update progress bar description
         wfo_progress_bar.set_description(
             f"WFO Progress (Step {step}: Train {train_prices.index[0].date()}->{period_start} | Test {test_prices.index[0].date()}->{period_end})"
         )
@@ -227,14 +225,11 @@ def main():
             n_generations=args.n_generations,
             seed_population=last_population,
             callback=None,
-            verbose=False,  # Set verbose to False to suppress nested tqdm
+            verbose=False,
         )
         last_population = pop
 
         pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
-
-        ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
-
         ind_aggressive = max(pareto_front, key=lambda ind: ind.fitness.values[0])
 
         if args.risk_metric == "sharpe":
@@ -258,9 +253,8 @@ def main():
             portfolio_history[profile_name].append({"date": period_start, "weights": weights, "tickers": valid_tickers})
 
         current_idx += rebalance_freq
-        wfo_progress_bar.update(1)  # Update the progress bar
-
-    wfo_progress_bar.close()  # Close the progress bar after the loop
+        wfo_progress_bar.update(1)
+    wfo_progress_bar.close()
     log_msg("\n[INFO] Optimization finished. Stitching performance...")
 
     if not equity_curve_parts["Balanced"]:
