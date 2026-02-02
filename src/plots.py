@@ -1085,3 +1085,102 @@ def plot_rolling_composition_and_correlations(portfolio_history: list[dict], out
         logger.info(f"Saved evolution plot to {save_path}")
 
     plt.close()
+
+
+def plot_intermediate_pareto_front(
+    generation: int,
+    population: list,
+    output_dir: str,
+    risk_metric: str = "std",
+    step: int = 0,
+):
+    """Plot and save Pareto front at an intermediate generation.
+
+    Args:
+        generation: Current generation number.
+        population: Current population of individuals.
+        output_dir: Directory to save the plot.
+        risk_metric: Risk metric being used ('std', 'mdd', 'sharpe').
+        step: Current WFO step number.
+    """
+    pareto_front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
+
+    if not pareto_front:
+        logger.warning(f"No pareto front found at generation {generation}")
+        return
+
+    returns = np.array([ind.fitness.values[0] for ind in pareto_front])
+    risks = np.array([ind.fitness.values[1] for ind in pareto_front])
+
+    all_returns = np.array([ind.fitness.values[0] for ind in population])
+    all_risks = np.array([ind.fitness.values[1] for ind in population])
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Plot all individuals in population
+    ax.scatter(
+        all_risks,
+        all_returns,
+        color="#95a5a6",
+        s=30,
+        alpha=0.4,
+        label="Population",
+    )
+
+    # Plot Pareto front
+    sort_idx = np.argsort(returns)
+    sorted_returns = returns[sort_idx]
+    sorted_risks = risks[sort_idx]
+
+    ax.scatter(
+        sorted_risks,
+        sorted_returns,
+        color="#e74c3c",
+        s=100,
+        alpha=0.8,
+        edgecolors="darkred",
+        linewidth=1.5,
+        label="Pareto Front",
+        zorder=5,
+    )
+
+    ax.plot(
+        sorted_risks,
+        sorted_returns,
+        color="#e74c3c",
+        linewidth=2,
+        alpha=0.6,
+        zorder=4,
+    )
+
+    # Labels and title
+    if risk_metric == "std":
+        risk_label = "Standard Deviation (Risk)"
+    elif risk_metric == "mdd":
+        risk_label = "Max Drawdown (Risk)"
+    elif risk_metric == "sharpe":
+        risk_label = "Negative Sharpe Ratio"
+    else:
+        risk_label = "Risk"
+
+    ax.set_xlabel(risk_label, fontweight="bold", fontsize=12)
+    ax.set_ylabel("Expected Return", fontweight="bold", fontsize=12)
+    ax.set_title(
+        f"NSGA-II Pareto Front - Generation {generation} (WFO Step {step})",
+        fontweight="bold",
+        fontsize=14,
+    )
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    # Save the plot
+    os.makedirs(output_dir, exist_ok=True)
+    filename = f"pareto_gen_{generation:04d}.png"
+    save_path = os.path.join(output_dir, filename)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    logger.debug(f"Saved Pareto front for generation {generation} to {save_path}")
+

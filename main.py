@@ -13,7 +13,7 @@ from loguru import logger
 
 from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
 from src.evolution import setup_deap, run_nsga2
-from src.plots import generate_wfo_factsheet, create_portfolio_gif
+from src.plots import generate_wfo_factsheet, create_portfolio_gif, plot_intermediate_pareto_front
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
@@ -74,6 +74,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=3,
         help="Tournament size for 'tournament' selection method",
+    )
+    parser.add_argument(
+        "--callback-interval",
+        type=int,
+        default=10,
+        help="Interval for saving intermediate Pareto front plots during evolution (e.g., 10 = save every 10 generations)",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--use-smoothing", action="store_true", help="Apply moving average smoothing to prices")
@@ -219,12 +225,26 @@ def main():
             selection_kwargs={"tournsize": args.selection_tournsize} if args.selection_method == "tournament" else None,
         )
 
+        # Create output directory for intermediate plots
+        step_output_dir = os.path.join(output_dir, f"step_{step:03d}_intermediate")
+
+        # Define callback to save intermediate Pareto fronts
+        def save_pareto_callback(gen, pop, logbook):
+            plot_intermediate_pareto_front(
+                generation=gen,
+                population=pop,
+                output_dir=step_output_dir,
+                risk_metric=args.risk_metric,
+                step=step,
+            )
+
         pop, _ = run_nsga2(
             toolbox,
             pop_size=args.pop_size,
             n_generations=args.n_generations,
             seed_population=last_population,
-            callback=None,
+            callback=save_pareto_callback,
+            callback_interval=args.callback_interval,
             verbose=False,
         )
         last_population = pop

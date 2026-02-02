@@ -37,6 +37,7 @@ uv run python main.py [OPTIONS]
 | `--seed` | Random seed for reproducibility | `None` |
 | `--pop-size` | Population size | `100` |
 | `--n-generations` | Number of generations | `50` |
+| `--callback-interval` | Save Pareto front plots every N generations (e.g. 10) | `10` |
 | `--train-window` | Training window size in days (e.g. 1008 = 4 years) | `1008` |
 | `--rebalance-freq` | Rebalancing frequency in days (e.g. 90 = 1 quarter) | `90` |
 | `--start-date` | Data start date (YYYY-MM-DD) | `2010-01-01` |
@@ -64,14 +65,20 @@ uv run python main.py --ticker-set CRYPTO --risk-metric mdd --pop-size 300
 uv run main.py --ticker-set WIG_BROAD --risk-metric sharpe --start-date 2010-01-01 --min-liquidity 1000000 --transaction-cost 0.005
 ```
 
+**Track evolution progress with intermediate Pareto fronts every 10 generations:**
+```bash
+uv run python main.py --ticker-set US_TECH --n-generations 100 --callback-interval 10
+```
+
 ## Output
 
 Results saved to `plots/wfo-{TIMESTAMP}/`:
 - `config.yaml`: Run parameters and seed.
-- `wfo_factsheet.png`: Comprehensive factsheet including Equity Curve, Drawdown, and Metrics Table.
-- `portfolio_evolution.gif`: Animated GIF showing portfolio composition changes over time.
-- `final_portfolio_composition.png`: Final asset weights (at the end of backtest).
-- `pareto_vs_markowitz.png`: Pareto front vs Efficient Frontier (from the last training window).
+- `conservative/`, `balanced/`, `aggressive/`: Profile-specific results folders containing:
+  - `wfo_factsheet.png`: Comprehensive factsheet including Equity Curve, Drawdown, and Metrics Table.
+  - `portfolio_evolution.gif`: Animated GIF showing portfolio composition changes over time.
+- `step_{N}_intermediate/`: Intermediate Pareto front plots saved every `--callback-interval` generations during evolution.
+  - `pareto_gen_{XXXX}.png`: Pareto front at generation XXXX showing both population and optimal front.
 
 ## Project Structure
 
