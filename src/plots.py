@@ -1184,3 +1184,128 @@ def plot_intermediate_pareto_front(
 
     logger.debug(f"Saved Pareto front for generation {generation} to {save_path}")
 
+
+def plot_intermediate_portfolio_vs_benchmark(
+    generation: int,
+    population: list,
+    historical_returns: np.ndarray,
+    benchmark_returns: np.ndarray | None,
+    output_dir: str,
+    risk_metric: str = "std",
+    step: int = 0,
+    profiles: list[str] = None,
+):
+    """Plot portfolio performance vs benchmark at an intermediate generation.
+
+    Args:
+        generation: Current generation number.
+        population: Current population of individuals.
+        historical_returns: Historical returns matrix (n_days, n_assets).
+        benchmark_returns: Benchmark returns array (n_days,) or None.
+        output_dir: Directory to save the plot.
+        risk_metric: Risk metric being used ('std', 'mdd', 'sharpe').
+        step: Current WFO step number.
+        profiles: List of profile names to plot (default: ['Conservative', 'Balanced', 'Aggressive']).
+    """
+    if profiles is None:
+        profiles = ['Conservative', 'Balanced', 'Aggressive']
+
+    pareto_front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
+
+    if not pareto_front:
+        logger.warning(f"No pareto front found at generation {generation}")
+        return
+
+    # Select representative portfolios from Pareto front
+    ind_aggressive = max(pareto_front, key=lambda ind: ind.fitness.values[0])
+
+    if risk_metric == "sharpe":
+        sorted_front = sorted(pareto_front, key=lambda ind: ind.fitness.values[0])
+        ind_balanced = sorted_front[len(sorted_front) // 2]
+        ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
+    else:
+        ind_conservative = min(pareto_front, key=lambda ind: ind.fitness.values[1])
+        ind_balanced = max(pareto_front, key=lambda ind: ind.fitness.values[0] / (ind.fitness.values[1] + 1e-9))
+
+    selected_inds = {
+        "Conservative": ind_conservative,
+        "Balanced": ind_balanced,
+        "Aggressive": ind_aggressive,
+    }
+
+    # Calculate portfolio returns
+    fig, axes = plt.subplots(len(profiles), 1, figsize=(12, 4 * len(profiles)))
+    if len(profiles) == 1:
+        axes = [axes]
+
+    colors = {
+        "Conservative": "#2ecc71",
+        "Balanced": "#3498db",
+        "Aggressive": "#e74c3c",
+    }
+
+    for idx, profile_name in enumerate(profiles):
+        ax = axes[idx]
+        ind = selected_inds[profile_name]
+        weights = np.array(ind)
+
+        # Calculate portfolio returns on historical data
+        portfolio_returns = historical_returns @ weights
+        portfolio_equity = (1 + portfolio_returns).cumprod()
+
+        # Plot portfolio
+        ax.plot(
+            portfolio_equity,
+            label=f"{profile_name} Portfolio",
+            color=colors[profile_name],
+            linewidth=2,
+            alpha=0.9,
+        )
+
+        # Plot benchmark if available
+        if benchmark_returns is not None:
+            benchmark_equity = (1 + benchmark_returns).cumprod()
+            ax.plot(
+                benchmark_equity,
+                label="Benchmark",
+                color="#95a5a6",
+                linewidth=2,
+                linestyle="--",
+                alpha=0.8,
+            )
+
+        # Add metrics to title
+        total_return = (portfolio_equity[-1] - 1) * 100
+        volatility = np.std(portfolio_returns) * np.sqrt(252) * 100
+
+        title = f"{profile_name} Portfolio - Gen {generation}"
+        title += f"\nReturn: {total_return:.2f}% | Volatility: {volatility:.2f}%"
+
+        if benchmark_returns is not None:
+            bench_return = (benchmark_equity[-1] - 1) * 100
+            title += f" | Benchmark: {bench_return:.2f}%"
+
+        ax.set_title(title, fontweight="bold", fontsize=11)
+        ax.set_xlabel("Trading Days", fontweight="bold")
+        ax.set_ylabel("Cumulative Return", fontweight="bold")
+        ax.legend(loc="best")
+        ax.grid(True, alpha=0.3)
+
+    plt.suptitle(
+        f"Portfolio vs Benchmark - Generation {generation} (WFO Step {step})",
+        fontsize=14,
+        fontweight="bold",
+        y=1.0 if len(profiles) == 1 else 0.995,
+    )
+    plt.tight_layout()
+
+    # Save the plot
+    os.makedirs(output_dir, exist_ok=True)
+    filename = f"portfolio_vs_benchmark_gen_{generation:04d}.png"
+    save_path = os.path.join(output_dir, filename)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    logger.debug(f"Saved portfolio vs benchmark plot for generation {generation} to {save_path}")
+
+

@@ -13,7 +13,12 @@ from loguru import logger
 
 from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
 from src.evolution import setup_deap, run_nsga2
-from src.plots import generate_wfo_factsheet, create_portfolio_gif, plot_intermediate_pareto_front
+from src.plots import (
+    generate_wfo_factsheet,
+    create_portfolio_gif,
+    plot_intermediate_pareto_front,
+    plot_intermediate_portfolio_vs_benchmark,
+)
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
 
@@ -228,11 +233,28 @@ def main():
         # Create output directory for intermediate plots
         step_output_dir = os.path.join(output_dir, f"step_{step:03d}_intermediate")
 
+        # Prepare benchmark returns for the training period
+        train_start_date = train_prices.index[0]
+        train_end_date = train_prices.index[-1]
+        benchmark_train = benchmark_prices.loc[train_start_date:train_end_date]
+        benchmark_train_returns = None
+        if not benchmark_train.empty and len(benchmark_train) > 1:
+            benchmark_train_returns = benchmark_train.pct_change().fillna(0).values
+
         # Define callback to save intermediate Pareto fronts
         def save_pareto_callback(gen, pop, logbook):
             plot_intermediate_pareto_front(
                 generation=gen,
                 population=pop,
+                output_dir=step_output_dir,
+                risk_metric=args.risk_metric,
+                step=step,
+            )
+            plot_intermediate_portfolio_vs_benchmark(
+                generation=gen,
+                population=pop,
+                historical_returns=historical_returns,
+                benchmark_returns=benchmark_train_returns,
                 output_dir=step_output_dir,
                 risk_metric=args.risk_metric,
                 step=step,
