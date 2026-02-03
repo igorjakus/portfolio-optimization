@@ -18,6 +18,8 @@ from src.plots import (
     create_portfolio_gif,
     plot_intermediate_pareto_front,
     plot_intermediate_portfolio_vs_benchmark,
+    plot_hypervolume_evolution,
+    create_evolution_gif,
 )
 from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
 
@@ -85,6 +87,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="Interval for saving intermediate Pareto front plots during evolution (e.g., 10 = save every 10 generations)",
+    )
+    parser.add_argument(
+        "--gif-duration",
+        type=float,
+        default=0.5,
+        help="Duration of each frame in the evolution GIFs (seconds)",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--use-smoothing", action="store_true", help="Apply moving average smoothing to prices")
@@ -249,6 +257,7 @@ def main():
                 generation=gen,
                 population=pop,
                 output_dir=step_output_dir,
+                logbook=logbook,
                 risk_metric=args.risk_metric,
                 step=step,
             )
@@ -262,7 +271,7 @@ def main():
                 step=step,
             )
 
-        pop, _ = run_nsga2(
+        pop, logbook = run_nsga2(
             toolbox,
             pop_size=args.pop_size,
             n_generations=args.n_generations,
@@ -272,6 +281,23 @@ def main():
             verbose=False,
         )
         last_population = pop
+
+        # Plot hypervolume evolution for this step
+        plot_hypervolume_evolution(logbook, output_dir, step=step)
+
+        # Create GIFs for this step's evolution
+        pareto_gif_path = os.path.join(output_dir, f"step_{step:03d}_pareto_evolution.gif")
+        create_evolution_gif(step_output_dir, pareto_gif_path, pattern="pareto_gen_*.png", duration=args.gif_duration)
+
+        benchmark_gif_path = os.path.join(output_dir, f"step_{step:03d}_benchmark_evolution.gif")
+        create_evolution_gif(
+            step_output_dir, benchmark_gif_path, pattern="portfolio_vs_benchmark_gen_*.png", duration=args.gif_duration
+        )
+
+        # Cleanup intermediate frames
+        import shutil
+
+        shutil.rmtree(step_output_dir, ignore_errors=True)
 
         pareto_front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
         ind_aggressive = max(pareto_front, key=lambda ind: ind.fitness.values[0])

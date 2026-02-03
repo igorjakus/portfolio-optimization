@@ -991,10 +991,23 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
         frames.append(frame_path)
 
     gif_path = os.path.join(output_dir, "portfolio_evolution.gif")
-    with imageio.get_writer(gif_path, mode="I", duration=0.5) as writer:
-        for filename in frames:
-            image = imageio.imread(filename)
-            writer.append_data(image)
+    images = []
+    base_shape = None
+    for filename in frames:
+        img = imageio.imread(filename)
+        if base_shape is None:
+            base_shape = img.shape[:2]
+        elif img.shape[:2] != base_shape:
+            from PIL import Image
+
+            img_pil = Image.fromarray(img)
+            img = np.array(img_pil.resize((base_shape[1], base_shape[0]), resample=Image.Resampling.LANCZOS))
+        images.append(img)
+
+    # Use Pillow directly to ensure correct duration
+    from PIL import Image
+    pil_images = [Image.fromarray(img) for img in images]
+    pil_images[0].save(gif_path, save_all=True, append_images=pil_images[1:], duration=1500, loop=0)
 
     for filename in frames:
         os.remove(filename)
@@ -1093,6 +1106,7 @@ def plot_intermediate_pareto_front(
     generation: int,
     population: list,
     output_dir: str,
+    logbook: tools.Logbook | None = None,
     risk_metric: str = "std",
     step: int = 0,
 ):
@@ -1102,6 +1116,7 @@ def plot_intermediate_pareto_front(
         generation: Current generation number.
         population: Current population of individuals.
         output_dir: Directory to save the plot.
+        logbook: Optional DEAP logbook to get hypervolume.
         risk_metric: Risk metric being used ('std', 'mdd', 'sharpe').
         step: Current WFO step number.
     """
@@ -1165,13 +1180,14 @@ def plot_intermediate_pareto_front(
     else:
         risk_label = "Risk"
 
+    title = f"NSGA-II Pareto Front - Gen {generation} (WFO Step {step})"
+    if logbook:
+        hv = logbook[-1].get("hypervolume", 0)
+        title += f"\nHypervolume: {hv:.4f}"
+
     ax.set_xlabel(risk_label, fontweight="bold", fontsize=12)
     ax.set_ylabel("Expected Return", fontweight="bold", fontsize=12)
-    ax.set_title(
-        f"NSGA-II Pareto Front - Generation {generation} (WFO Step {step})",
-        fontweight="bold",
-        fontsize=14,
-    )
+    ax.set_title(title, fontweight="bold", fontsize=14)
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
 
@@ -1185,6 +1201,71 @@ def plot_intermediate_pareto_front(
     plt.close()
 
     logger.debug(f"Saved Pareto front for generation {generation} to {save_path}")
+
+
+def plot_hypervolume_evolution(logbook: tools.Logbook, output_dir: str, step: int = 0):
+    """Plot hypervolume evolution over generations.
+
+    Args:
+        logbook: DEAP logbook containing 'hypervolume'.
+        output_dir: Directory to save the plot.
+        step: Current WFO step number.
+    """
+    gen = logbook.select("gen")
+    hv = logbook.select("hypervolume")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(gen, hv, marker="o", linestyle="-", color="#3498db", linewidth=2)
+    plt.title(f"Hypervolume Evolution - WFO Step {step}", fontweight="bold", fontsize=14)
+    plt.xlabel("Generation", fontweight="bold")
+    plt.ylabel("Hypervolume", fontweight="bold")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    save_path = os.path.join(output_dir, f"hypervolume_evolution_step_{step:03d}.png")
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    logger.info(f"Saved hypervolume evolution to {save_path}")
+
+
+def create_evolution_gif(frames_dir: str, output_path: str, pattern: str = "pareto_gen_*.png", duration: float = 0.5):
+    """Creates a GIF from images in a directory matching a pattern.
+
+    Args:
+        frames_dir: Directory containing image frames.
+        output_path: Path to save the resulting GIF.
+        pattern: Glob pattern to match files.
+        duration: Duration of each frame in seconds.
+    """
+    import glob
+
+    frame_files = sorted(glob.glob(os.path.join(frames_dir, pattern)))
+    if not frame_files:
+        logger.warning(f"No frames found in {frames_dir} with pattern {pattern}")
+        return
+
+    logger.info(f"Creating GIF from {len(frame_files)} frames...")
+    images = []
+    base_shape = None
+    for filename in frame_files:
+        img = imageio.imread(filename)
+        if base_shape is None:
+            base_shape = img.shape[:2]
+        elif img.shape[:2] != base_shape:
+            from PIL import Image
+
+            img_pil = Image.fromarray(img)
+            img = np.array(img_pil.resize((base_shape[1], base_shape[0]), resample=Image.Resampling.LANCZOS))
+        images.append(img)
+
+    # Use Pillow directly for reliable duration
+    from PIL import Image
+    pil_images = [Image.fromarray(img) for img in images]
+    # duration in Pillow is in milliseconds
+    ms_duration = int(duration * 1000)
+    pil_images[0].save(output_path, save_all=True, append_images=pil_images[1:], duration=ms_duration, loop=0)
+
+    logger.info(f"Saved GIF to {output_path}")
 
 
 def plot_intermediate_portfolio_vs_benchmark(

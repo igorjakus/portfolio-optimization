@@ -2,8 +2,8 @@ import numpy as np
 from typing import Any, Iterable
 from collections.abc import Callable
 from deap import base, creator, tools, algorithms
+from deap.benchmarks.tools import hypervolume as calculate_hv
 from tqdm import tqdm
-from numpy.typing import NDArray
 from src.utils import maximum_drawdown, normalize_weights, sharpe_ratio
 from src.mutations import gaussian_mutation, swap_mutation, transfer_mutation
 from src.crossovers import arithmetic_crossover, blend_crossover, dirichlet_blend_crossover
@@ -14,6 +14,17 @@ class FitnessMulti(base.Fitness):
     """Custom fitness class with hashability support for DEAP."""
 
     weights = (1.0, -1.0)
+
+    def __hash__(self):
+        return hash(tuple(self.wvalues))
+
+    def __eq__(self, other):
+        if not hasattr(other, "wvalues"):
+            return False
+        return np.allclose(self.wvalues, other.wvalues)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 def evaluate_portfolio(
@@ -62,13 +73,13 @@ def evaluate_portfolio(
 
 
 def mutate_wrapper(
-    individual: NDArray[np.float64],
+    individual: list[float],
     method: str = "gaussian",
     gaussian_rate: float = 0.3,
     gaussian_sigma: float = 0.08,
     swap_rate: float = 0.15,
     transfer_amount: float = 0.05,
-) -> tuple[np.ndarray]:
+) -> tuple[list[float]]:
     """Wrapper for mutation operations on an individual.
 
     Args:
@@ -80,9 +91,9 @@ def mutate_wrapper(
         transfer_amount: Amount to transfer in transfer mutation.
 
     Returns:
-        tuple[np.ndarray]: Tuple containing the mutated individual.
+        tuple[list[float]]: Tuple containing the mutated individual.
     """
-    mutated = individual.reshape(1, -1).copy()
+    mutated = np.array(individual).reshape(1, -1).copy()
 
     if method == "gaussian":
         mutated = gaussian_mutation(mutated, mutation_rate=gaussian_rate, sigma=gaussian_sigma)
@@ -99,15 +110,18 @@ def mutate_wrapper(
     else:
         raise ValueError(f"Unknown mutation method: {method}")
 
-    individual[:] = mutated[0]
+    individual[:] = mutated[0].tolist()
     if hasattr(individual.fitness, "values"):
         del individual.fitness.values
     return (individual,)
 
 
 def crossover_wrapper(
-    parent1: NDArray[np.float64], parent2: NDArray[np.float64], method: str = "arithmetic", alpha: float = 0.5
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    parent1: list[float],
+    parent2: list[float],
+    method: str = "arithmetic",
+    alpha: float = 0.5,
+) -> tuple[list[float], list[float]]:
     """Wrapper for crossover operations between two parents.
 
     Args:
@@ -117,7 +131,7 @@ def crossover_wrapper(
         alpha: Mixing parameter.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: Two offspring individuals.
+        tuple[list[float], list[float]]: Two offspring individuals.
     """
     p1 = np.array(parent1)
     p2 = np.array(parent2)
@@ -134,8 +148,8 @@ def crossover_wrapper(
     offspring1 = normalize_weights(offspring1.reshape(1, -1))[0]
     offspring2 = normalize_weights(offspring2.reshape(1, -1))[0]
 
-    parent1[:] = offspring1
-    parent2[:] = offspring2
+    parent1[:] = offspring1.tolist()
+    parent2[:] = offspring2.tolist()
     if hasattr(parent1.fitness, "values"):
         del parent1.fitness.values
     if hasattr(parent2.fitness, "values"):
@@ -183,13 +197,14 @@ def setup_deap(
 
     if not hasattr(creator, "FitnessMulti"):
         creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0))
+
     if not hasattr(creator, "Individual"):
-        creator.create("Individual", np.ndarray, fitness=creator.FitnessMulti)
+        creator.create("Individual", list, fitness=creator.FitnessMulti)
 
     toolbox = base.Toolbox()
 
     def create_individual(n_assets: int):
-        ind = creator.Individual(np.random.dirichlet(np.ones(n_assets)))
+        ind = creator.Individual(np.random.dirichlet(np.ones(n_assets)).tolist())
         return ind
 
     toolbox.register("individual", create_individual, n_assets=len(stock_names))
@@ -296,15 +311,26 @@ def run_nsga2(
 
     pop = tools.selNSGA2(pop, len(pop))
 
+    # Initial reference point for hypervolume calculation
+    # calculate_hv uses ind.fitness.wvalues * -1, which for us is (-return, risk)
+    # We take a reference point slightly worse than the worst in initial population
+    front0 = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
+    # wvalues are (return, -risk), so -wvalues are (-return, risk)
+    wfits = np.array([-np.array(ind.fitness.wvalues) for ind in front0])
+    ref_point = np.max(wfits, axis=0) * 1.2
+    ref_point[0] = max(ref_point[0], 0.1)
+    ref_point[1] = max(ref_point[1], 0.1)
+
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg_return", lambda x: np.mean([f[0] for f in x]))
     stats.register("avg_risk", lambda x: np.mean([f[1] for f in x]))
 
     logbook = tools.Logbook()
-    logbook.header = ["gen", "nevals", "avg_return", "avg_risk"]
+    logbook.header = ["gen", "nevals", "avg_return", "avg_risk", "hypervolume"]
 
+    hv_value = calculate_hv(front0, ref_point)
     record = stats.compile(pop)
-    logbook.record(gen=0, nevals=len(invalid_ind), **record)
+    logbook.record(gen=0, nevals=len(invalid_ind), hypervolume=hv_value, **record)
 
     generations_iterable: Iterable[int] = range(1, n_generations + 1)
     if verbose:
@@ -319,9 +345,11 @@ def run_nsga2(
             ind.fitness.values = fit
 
         pop = tools.selNSGA2(pop + offspring, pop_size)
+        front = tools.sortNondominated(pop, len(pop), first_front_only=True)[0]
 
+        hv_value = calculate_hv(front, ref_point)
         record = stats.compile(pop)
-        logbook.record(gen=gen, nevals=len(invalid_ind), **record)
+        logbook.record(gen=gen, nevals=len(invalid_ind), hypervolume=hv_value, **record)
 
         if callback is not None and gen % callback_interval == 0:
             try:
