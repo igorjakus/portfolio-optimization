@@ -842,7 +842,9 @@ def generate_wfo_factsheet(
     logger.info(
         f"{'Compound Annual Growth Rate':<30} | {port_metrics['cagr'] * 100:14.2f}% | {bench_metrics['cagr'] * 100:14.2f}%"
     )
-    logger.info(f"{'Annualized Volatility':<30} | {port_metrics['std'] * 100:14.2f}% | {bench_metrics['std'] * 100:14.2f}%")
+    logger.info(
+        f"{'Annualized Volatility':<30} | {port_metrics['std'] * 100:14.2f}% | {bench_metrics['std'] * 100:14.2f}%"
+    )
     logger.info(f"{'Max Drawdown':<30} | {port_metrics['mdd'] * 100:14.2f}% | {bench_metrics['mdd'] * 100:14.2f}%")
     logger.info(
         f"{'Best 365 Days':<30} | {port_metrics['best_year'] * 100:14.2f}% | {bench_metrics['best_year'] * 100:14.2f}%"
@@ -1208,7 +1210,7 @@ def plot_intermediate_portfolio_vs_benchmark(
         profiles: List of profile names to plot (default: ['Conservative', 'Balanced', 'Aggressive']).
     """
     if profiles is None:
-        profiles = ['Conservative', 'Balanced', 'Aggressive']
+        profiles = ["Conservative", "Balanced", "Aggressive"]
 
     pareto_front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
 
@@ -1307,5 +1309,3 @@ def plot_intermediate_portfolio_vs_benchmark(
     plt.close()
 
     logger.debug(f"Saved portfolio vs benchmark plot for generation {generation} to {save_path}")
-
-

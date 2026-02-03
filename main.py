@@ -145,7 +145,9 @@ def main():
     total_days = len(full_prices)
 
     if total_days < train_window_days + rebalance_freq:
-        logger.error(f"[ERROR] Not enough data. Have {total_days} days, need at least {train_window_days + rebalance_freq}.")
+        logger.error(
+            f"[ERROR] Not enough data. Have {total_days} days, need at least {train_window_days + rebalance_freq}."
+        )
         return
 
     log_msg("\n[INFO] Starting Walk-Forward Optimization")

@@ -96,9 +96,7 @@ def process_returns(
     if fill_missing:
         prices_df = fill_missing_dates(prices_df, fill_weekends=fill_weekends)
         if volume_df is not None:
-            volume_df = fill_missing_dates(
-                volume_df, method="ffill", fill_weekends=fill_weekends
-            )
+            volume_df = fill_missing_dates(volume_df, method="ffill", fill_weekends=fill_weekends)
 
     if apply_smoothing:
         prices_df = smooth_prices(prices_df, window=smoothing_window)
