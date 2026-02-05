@@ -2,6 +2,22 @@
 
 A multi-objective portfolio optimization tool using the NSGA-II evolutionary algorithm with Walk-Forward Optimization (WFO) for robust backtesting. The system optimizes portfolio weights to maximize returns while minimizing risk, comparing results against the Markowitz efficient frontier and market indices.
 
+## Showcase (Aggressive Strategy)
+
+The following charts demonstrate the performance of an optimized aggressive portfolio strategy over time.
+
+### Performance Factsheet
+
+![Aggressive Factsheet](assets/showcase/aggressive_factsheet.png)
+
+### Optimization Process (single time window)
+
+Evolution of the Pareto front and comparison with market benchmarks during the first Walk-Forward window.
+
+|                    Pareto Front Optimization                     |                         Strategy vs Benchmark                          |
+| :--------------------------------------------------------------: | :--------------------------------------------------------------------: |
+| ![Pareto Evolution](assets/showcase/step_1_pareto_evolution.gif) | ![Benchmark Evolution](assets/showcase/step_1_benchmark_evolution.gif) |
+
 ## Features
 
 - **Multi-Objective Optimization**: Find optimal trade-offs between return and risk using NSGA-II.
@@ -108,10 +124,9 @@ Results saved to `plots/wfo-{TIMESTAMP}/`:
 
 This tool provides a powerful framework for portfolio optimization. However, it's crucial to understand its inherent limitations, especially when interpreting backtesting results:
 
-- **Survivorship Bias & Look-ahead Bias (Universe Selection)**: The biggest challenge for historical backtesting with free data sources like `yfinance`.
-  - We use a broad universe of currently existing tickers (`WIG_BROAD`). This means the algorithm implicitly "sees" companies that survived until today, ignoring those that delisted, went bankrupt, or were illiquid in the past. It does not account for companies that _existed_ in the index historically but are no longer traded or whose data has been purged from `yfinance`.
-  - Our `min-liquidity` filter helps mitigate this by only considering truly tradable assets in each historical window, but it cannot reintroduce data for delisted companies.
-  - Therefore, the historical performance shown should be considered an **optimistic upper bound** of what might have been achievable.
+- **Survivorship Bias**: A key challenge with free data. Using static lists of current tickers (e.g., `WIG20`, `US_TECH`) implicitly ignores past bankruptcies or delistings, creating an optimistic bias.
+  - **ETFS Robustness**: This bias is minimal for the `ETFS` set, as ETFs automatically handle internal turnover of underlying assets.
+  - **Mitigation**: Our `min-liquidity` filter removes illiquid assets in each window, but historical results should still be viewed as an optimistic upper bound.
 - **Data Quality & Completeness (`yfinance`)**:
   - `yfinance` data can be incomplete, especially for older periods or less liquid stocks. Merged or delisted companies often have their historical data removed or ticker symbols changed, making true survivorship-bias-free backtesting extremely difficult.
   - Errors in dividend adjustments or splits can lead to artificial price spikes/drops, which the algorithm might exploit unrealistically.

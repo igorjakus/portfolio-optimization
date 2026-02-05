@@ -97,10 +97,8 @@ TICKER_SETS = {
             # sector-specific
             "QQQ",  # Nasdaq 100
             # "AGG",  # US Aggregate Bond
-            "TLT",  # Long-Term US Treasuries
-            "GLD",  # Gold
-            "SLV",  # Silver
-            "VNQ",  # US Real Estate (REITs)
+            # "TLT",  # Long-Term US Treasuries
+            # "VNQ",  # US Real Estate (REITs)
         ],
     },
     "CRYPTO": {

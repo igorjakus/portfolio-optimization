@@ -37,14 +37,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--start-date",
         type=str,
-        default="2015-01-01",
+        default="2009-04-06",  # earliest date with all ETFs tickers data available
         help="Data start date (YYYY-MM-DD).",
     )
     parser.add_argument("--benchmark", type=str, default="", help="Optional benchmark ticker")
-    parser.add_argument("--pop-size", type=int, default=50, help="Population size")
-    parser.add_argument("--n-generations", type=int, default=20, help="Generations per rebalance")
+    parser.add_argument("--pop-size", type=int, default=200, help="Population size")
+    parser.add_argument("--n-generations", type=int, default=10, help="Generations per rebalance")
     parser.add_argument(
-        "--train-window", type=int, default=365 * 3, help="Training window size in days (e.g. 1008 = 4 years)"
+        "--train-window", type=int, default=365 * 2, help="Training window size in days (e.g. 1008 = 4 years)"
     )
     parser.add_argument(
         "--rebalance-freq", type=int, default=90, help="Rebalancing frequency in days (e.g. 90 = 1 quarter)"
@@ -202,8 +202,13 @@ def main():
         )
 
         try:
+            # Calculate delta_t to use the full available training window
+            # We subtract 2 to be safe: 1 for pct_change (lost first row) and 1 for the slicing logic
+            effective_delta_t = max(10, len(train_prices) - 2)
+
             stats = process_returns(
                 train_prices,
+                delta_t=effective_delta_t,
                 apply_smoothing=args.use_smoothing,
                 fill_missing=args.fill_missing,
                 fill_weekends=not args.no_fill_weekends,
@@ -245,12 +250,15 @@ def main():
         step_output_dir = os.path.join(output_dir, f"step_{step:03d}_intermediate")
 
         # Prepare benchmark returns for the training period
-        train_start_date = train_prices.index[0]
-        train_end_date = train_prices.index[-1]
-        benchmark_train = benchmark_prices.loc[train_start_date:train_end_date]
+        # Align exactly with the dates used in portfolio analysis
+        hist_returns_index = stats["historical_returns"].index
         benchmark_train_returns = None
-        if not benchmark_train.empty and len(benchmark_train) > 1:
-            benchmark_train_returns = benchmark_train.pct_change().fillna(0).values
+
+        if not benchmark_prices.empty:
+            # Calculate returns for the full benchmark history first, then slice precisely
+            # This avoids losing the first day of the slice and ensures alignment
+            bench_daily_ret = benchmark_prices.pct_change().fillna(0)
+            benchmark_train_returns = bench_daily_ret.reindex(hist_returns_index).fillna(0).values
 
         # Define callback to save intermediate Pareto fronts
         def save_pareto_callback(gen, pop, logbook):
