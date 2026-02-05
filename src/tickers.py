@@ -84,15 +84,23 @@ TICKER_SETS = {
         ],
     },
     "ETFS": {
-        "benchmark": "ACWI",
+        "benchmark": "VT",
         "tickers": [
-            "SPY",  # S&P 500
-            "QQQ",  # Nasdaq 100
-            "EEM",  # Emerging Markets
-            "EFA",  # EAFE (Europe, Australia, Asia, Far East)
-            "AGG",  # US Aggregate Bond
-            "GLD",  # Gold
+            # broad market
+            # "VT",  # Vanguard Total World Stock ETF
+            "VWO",  # Emerging Markets
+            "VEA",  # Developed Markets (ex US)
+            "SPY",  # S&P 500 (US Large Cap)
+            # small caps
             "IWM",  # Russell 2000 (Small Cap)
+            "VSS",  # FTSE All-World ex US Small Cap
+            # sector-specific
+            "QQQ",  # Nasdaq 100
+            # "AGG",  # US Aggregate Bond
+            "TLT",  # Long-Term US Treasuries
+            "GLD",  # Gold
+            "SLV",  # Silver
+            "VNQ",  # US Real Estate (REITs)
         ],
     },
     "CRYPTO": {
@@ -111,4 +119,4 @@ TICKER_SETS = {
 # Dynamically add WIG20 tickers to WIG_BROAD to avoid redundancy
 TICKER_SETS["WIG_BROAD"]["tickers"] = TICKER_SETS["WIG20"]["tickers"] + TICKER_SETS["WIG_BROAD"]["tickers"]
 
-DEFAULT_TICKER_SET = "WIG20"
+DEFAULT_TICKER_SET = "ETFS"
