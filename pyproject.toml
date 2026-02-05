@@ -19,6 +19,7 @@ dependencies = [
     "yfinance>=1.0",
     "imageio",
     "loguru",
+    "isort>=7.0.0",
 ]
 
 [tool.ruff]

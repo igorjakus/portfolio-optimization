@@ -1,13 +1,15 @@
-import numpy as np
-from typing import Any, Iterable
 from collections.abc import Callable
-from deap import base, creator, tools, algorithms
+from typing import Any, Iterable
+
+import numpy as np
+from deap import algorithms, base, creator, tools
 from deap.benchmarks.tools import hypervolume as calculate_hv
-from tqdm import tqdm
-from src.utils import maximum_drawdown, normalize_weights, sharpe_ratio
-from src.mutations import gaussian_mutation, swap_mutation, transfer_mutation
-from src.crossovers import arithmetic_crossover, blend_crossover, dirichlet_blend_crossover
 from loguru import logger
+from tqdm import tqdm
+
+from src.crossovers import arithmetic_crossover, blend_crossover, dirichlet_blend_crossover
+from src.mutations import gaussian_mutation, swap_mutation, transfer_mutation
+from src.utils import maximum_drawdown, normalize_weights, sharpe_ratio
 
 
 class FitnessMulti(base.Fitness):

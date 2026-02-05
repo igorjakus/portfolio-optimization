@@ -3,25 +3,26 @@
 import argparse
 import os
 import random
-import yaml
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
+import yaml
 from deap import tools
-from tqdm import tqdm
 from loguru import logger
+from tqdm import tqdm
 
-from src.data import load_prices, process_returns, load_benchmark, create_synthetic_index
-from src.evolution import setup_deap, run_nsga2
+from src.data import create_synthetic_index, load_benchmark, load_prices, process_returns
+from src.evolution import run_nsga2, setup_deap
 from src.plots import (
-    generate_wfo_factsheet,
+    create_evolution_gif,
     create_portfolio_gif,
+    generate_wfo_factsheet,
+    plot_hypervolume_evolution,
     plot_intermediate_pareto_front,
     plot_intermediate_portfolio_vs_benchmark,
-    plot_hypervolume_evolution,
-    create_evolution_gif,
 )
-from src.tickers import TICKER_SETS, DEFAULT_TICKER_SET
+from src.tickers import DEFAULT_TICKER_SET, TICKER_SETS
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,10 +41,10 @@ def parse_args() -> argparse.Namespace:
         help="Data start date (YYYY-MM-DD).",
     )
     parser.add_argument("--benchmark", type=str, default="", help="Optional benchmark ticker")
-    parser.add_argument("--pop-size", type=int, default=100, help="Population size")
-    parser.add_argument("--n-generations", type=int, default=50, help="Generations per rebalance")
+    parser.add_argument("--pop-size", type=int, default=50, help="Population size")
+    parser.add_argument("--n-generations", type=int, default=20, help="Generations per rebalance")
     parser.add_argument(
-        "--train-window", type=int, default=1008, help="Training window size in days (e.g. 1008 = 4 years)"
+        "--train-window", type=int, default=365 * 3, help="Training window size in days (e.g. 1008 = 4 years)"
     )
     parser.add_argument(
         "--rebalance-freq", type=int, default=90, help="Rebalancing frequency in days (e.g. 90 = 1 quarter)"
@@ -51,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--risk-metric",
         type=str,
-        default="std",
+        default="mdd",
         choices=["std", "mdd", "sharpe"],
         help="Risk metric: 'std' (volatility), 'mdd' (max drawdown), 'sharpe' (Sharpe ratio)",
     )
@@ -85,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--callback-interval",
         type=int,
-        default=10,
+        default=1,
         help="Interval for saving intermediate Pareto front plots during evolution (e.g., 10 = save every 10 generations)",
     )
     parser.add_argument(

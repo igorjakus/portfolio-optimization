@@ -1,23 +1,24 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
-import pandas as pd
-import imageio.v2 as imageio
-from IPython.display import clear_output
 import os
-from loguru import logger
 
 import deap.tools as tools
+import imageio.v2 as imageio
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from IPython.display import clear_output
+from loguru import logger
+
 from src.utils import (
     cagr,
-    portfolio_std_dev,
-    correlation_with_benchmark,
+    calculate_rolling_annual_returns,
     calculate_turnover,
+    correlation_with_benchmark,
+    max_drawdown_duration,
+    portfolio_std_dev,
+    semivariance,
     sharpe_ratio,
     sortino_ratio,
-    semivariance,
-    calculate_rolling_annual_returns,
-    max_drawdown_duration,
 )
 
 
@@ -1006,6 +1007,7 @@ def create_portfolio_gif(portfolio_history: list, output_dir: str):
 
     # Use Pillow directly to ensure correct duration
     from PIL import Image
+
     pil_images = [Image.fromarray(img) for img in images]
     pil_images[0].save(gif_path, save_all=True, append_images=pil_images[1:], duration=1500, loop=0)
 
@@ -1260,6 +1262,7 @@ def create_evolution_gif(frames_dir: str, output_path: str, pattern: str = "pare
 
     # Use Pillow directly for reliable duration
     from PIL import Image
+
     pil_images = [Image.fromarray(img) for img in images]
     # duration in Pillow is in milliseconds
     ms_duration = int(duration * 1000)
